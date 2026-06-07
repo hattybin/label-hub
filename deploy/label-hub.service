@@ -1,0 +1,38 @@
+# systemd unit for label-hub.
+#
+# Install:
+#   sudo cp target/release/label-hub /usr/local/bin/label-hub
+#   sudo mkdir -p /opt/label-hub && sudo cp -r web /opt/label-hub/
+#   sudo cp .env /opt/label-hub/.env           # your filled-in config
+#   sudo cp deploy/label-hub.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now label-hub
+#
+# Logs:  journalctl -u label-hub -f
+
+[Unit]
+Description=Label Hub (D365 ZPL print hub)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Run as a non-root user; create one with: sudo useradd -r -s /usr/sbin/nologin labelhub
+User=labelhub
+Group=labelhub
+WorkingDirectory=/opt/label-hub
+EnvironmentFile=/opt/label-hub/.env
+ExecStart=/usr/local/bin/label-hub
+Restart=on-failure
+RestartSec=3
+# Persisted state (printers/jobs/settings) lives here; keep it writable.
+StateDirectory=label-hub
+Environment=DATA_DIR=/var/lib/label-hub
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/label-hub
+
+[Install]
+WantedBy=multi-user.target

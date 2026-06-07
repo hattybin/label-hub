@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Label Hub</title>
+<style>
+  :root {
+    --bg:#0f1419; --panel:#1a212b; --panel2:#222c38; --line:#2c3744;
+    --text:#e6edf3; --muted:#8b98a5; --accent:#3b82f6; --accent2:#2563eb;
+    --good:#22c55e; --bad:#ef4444; --warn:#f59e0b;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+         background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; gap:16px; padding:12px 20px;
+           background:var(--panel); border-bottom:1px solid var(--line); }
+  header h1 { font-size:16px; margin:0; font-weight:600; }
+  header .site { color:var(--accent); font-weight:700; }
+  header .status { margin-left:auto; font-size:12px; color:var(--muted); }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--bad);
+         margin-right:5px; vertical-align:middle; }
+  .dot.on { background:var(--good); }
+  nav { display:flex; gap:2px; padding:0 20px; background:var(--panel);
+        border-bottom:1px solid var(--line); }
+  nav button { background:none; border:none; color:var(--muted); padding:12px 18px;
+               cursor:pointer; font-size:14px; border-bottom:2px solid transparent; }
+  nav button.active { color:var(--text); border-bottom-color:var(--accent); }
+  nav button .badge { background:var(--accent); color:#fff; border-radius:10px;
+                      padding:0 7px; font-size:11px; margin-left:6px; }
+  main { padding:20px; max-width:1200px; margin:0 auto; }
+  .tab { display:none; }
+  .tab.active { display:block; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+           padding:16px; margin-bottom:16px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .grow { flex:1; }
+  h2 { font-size:15px; margin:0 0 12px; }
+  label.fld { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
+  input, select { background:var(--panel2); border:1px solid var(--line); color:var(--text);
+                  border-radius:6px; padding:8px 10px; font-size:14px; }
+  input:focus, select:focus { outline:none; border-color:var(--accent); }
+  button.btn { background:var(--accent); color:#fff; border:none; border-radius:6px;
+               padding:8px 14px; cursor:pointer; font-size:13px; font-weight:500; }
+  button.btn:hover { background:var(--accent2); }
+  button.btn.ghost { background:var(--panel2); color:var(--text); border:1px solid var(--line); }
+  button.btn.danger { background:var(--bad); }
+  button.btn.small { padding:5px 10px; font-size:12px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:500; font-size:12px; text-transform:uppercase; letter-spacing:.03em; }
+  tr:hover td { background:var(--panel2); }
+  .tag { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; }
+  .tag.queued { background:#1e3a5f; color:#93c5fd; }
+  .tag.printed { background:#14432a; color:#86efac; }
+  .tag.failed { background:#451a1a; color:#fca5a5; }
+  .tag.dismissed { background:#3a3a3a; color:#bbb; }
+  .empty { color:var(--muted); text-align:center; padding:40px; }
+  .switch { display:flex; align-items:center; gap:10px; }
+  .toggle { position:relative; width:46px; height:24px; }
+  .toggle input { display:none; }
+  .toggle span { position:absolute; inset:0; background:var(--panel2); border:1px solid var(--line);
+                 border-radius:24px; cursor:pointer; transition:.2s; }
+  .toggle span:before { content:""; position:absolute; width:18px; height:18px; left:3px; top:2px;
+                        background:#fff; border-radius:50%; transition:.2s; }
+  .toggle input:checked + span { background:var(--accent); }
+  .toggle input:checked + span:before { transform:translateX(22px); }
+  .muted { color:var(--muted); }
+  .mono { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+  code { background:var(--panel2); padding:2px 6px; border-radius:4px; font-size:12px; }
+  pre { background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:12px;
+        overflow:auto; font-size:12px; }
+  .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.6); display:none;
+              align-items:center; justify-content:center; z-index:50; }
+  .modal-bg.show { display:flex; }
+  .modal { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+           padding:16px; max-width:90vw; max-height:90vh; overflow:auto; }
+  .modal img { max-width:520px; background:#fff; border-radius:4px; }
+  #toast { position:fixed; bottom:20px; right:20px; display:flex; flex-direction:column; gap:8px; z-index:60; }
+  .toast { background:var(--panel2); border:1px solid var(--line); border-left:3px solid var(--accent);
+           padding:10px 14px; border-radius:6px; font-size:13px; box-shadow:0 4px 12px rgba(0,0,0,.4); }
+  .toast.bad { border-left-color:var(--bad); }
+  .toast.good { border-left-color:var(--good); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Label Hub · <span class="site" id="siteName">…</span></h1>
+  <div class="status"><span class="dot" id="liveDot"></span><span id="liveText">connecting…</span></div>
+</header>
+<nav>
+  <button data-tab="queue" class="active">Receiving Queue <span class="badge" id="queueBadge" style="display:none">0</span></button>
+  <button data-tab="reprint">Reprint Console</button>
+  <button data-tab="site">Site Management</button>
+</nav>
+
+<main>
+  <!-- ── Receiving Queue ─────────────────────────────────────────────── -->
+  <section class="tab active" id="tab-queue">
+    <div class="panel">
+      <div class="row">
+        <div class="switch">
+          <label class="toggle"><input type="checkbox" id="autoPrint"><span></span></label>
+          <div>
+            <strong>Auto-print</strong>
+            <div class="muted" id="autoPrintHint">When on, inbound labels print immediately on arrival.</div>
+          </div>
+        </div>
+        <div class="grow"></div>
+        <button class="btn ghost small" onclick="loadQueue()">Refresh</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Queued labels</h2>
+      <table>
+        <thead><tr><th>Received</th><th>Printer</th><th>Source</th><th>Labels</th><th>Status</th><th></th></tr></thead>
+        <tbody id="queueBody"></tbody>
+      </table>
+      <div class="empty" id="queueEmpty">No labels waiting. Inbound jobs from D365 appear here.</div>
+    </div>
+  </section>
+
+  <!-- ── Reprint Console ─────────────────────────────────────────────── -->
+  <section class="tab" id="tab-reprint">
+    <div class="panel">
+      <div class="row">
+        <input class="grow" id="histFilter" placeholder="Filter by printer or status…" oninput="renderHistory()">
+        <button class="btn ghost small" onclick="loadHistory()">Refresh</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Print history</h2>
+      <table>
+        <thead><tr><th>Time</th><th>Printer</th><th>Source</th><th>Labels</th><th>Status</th><th></th></tr></thead>
+        <tbody id="histBody"></tbody>
+      </table>
+      <div class="empty" id="histEmpty">No history yet.</div>
+    </div>
+  </section>
+
+  <!-- ── Site Management ─────────────────────────────────────────────── -->
+  <section class="tab" id="tab-site">
+    <div class="panel">
+      <h2>Health</h2>
+      <div id="healthBox" class="mono"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Printer profiles</h2>
+      <div class="row" style="margin-bottom:12px">
+        <label class="fld">Name<input id="pName" placeholder="LINE1-ZEBRA"></label>
+        <label class="fld">IP / host<input id="pIp" placeholder="192.168.1.50"></label>
+        <label class="fld">Port<input id="pPort" type="number" value="9100" style="width:90px"></label>
+        <button class="btn" style="align-self:flex-end" onclick="savePrinter()">Save printer</button>
+      </div>
+      <table>
+        <thead><tr><th>Name</th><th>Address</th><th>Reachable</th><th></th></tr></thead>
+        <tbody id="printerBody"></tbody>
+      </table>
+      <div class="empty" id="printerEmpty">No printers yet. Add one above.</div>
+    </div>
+
+    <div class="panel">
+      <h2>D365 External Service mapping</h2>
+      <p class="muted">Configure the D365 External Service operation to POST to this hub. The
+      hub accepts raw ZPL with the printer in a header (recommended):</p>
+      <pre id="d365Help"></pre>
+    </div>
+  </section>
+</main>
+
+<div class="modal-bg" id="modalBg" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div id="modalContent"></div>
+    <div style="text-align:right;margin-top:12px"><button class="btn ghost small" onclick="closeModal()">Close</button></div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+/target
+.env
+crates/*/.env
+/data
+crates/*/data
+*.log
+# Pi image build artifacts
+images/pi-gen/_pi-gen/
+images/pi-gen/stage-labelhub/files/

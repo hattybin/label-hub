@@ -1,0 +1,25 @@
+# Label Hub node configuration — first-boot provisioning.
+#
+# After flashing the image, copy this file to the FAT "boot" partition as
+# `labelhub.conf` (it's editable from any computer). On first boot the node reads
+# it, joins Tailscale, enrolls with the control plane, and starts the service.
+#
+# If this file is absent, the node boots in standalone local mode (console on
+# http://printlabels.local:8081) so you can configure it by hand.
+
+# Friendly site name (also used as the Tailscale hostname / MagicDNS name).
+SITE_NAME=PLANT1
+
+# Control plane node-API base URL (over the mesh).
+CONTROL_URL=https://control.example.com:9090
+
+# One-time enrollment token from the control dashboard (Enrollment tab).
+ENROLLMENT_TOKEN=paste-token-here
+
+# Tailscale auth key. Optional: if blank, the control plane issues one at enrollment.
+# A tagged (tag:lh-node), pre-authorized key lets the device join unattended.
+TAILSCALE_AUTHKEY=
+
+# Ports (defaults are fine).
+LOCAL_PORT=8081
+PUBLIC_PORT=8080

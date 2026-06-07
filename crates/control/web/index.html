@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Label Hub · Control</title>
+<style>
+  :root {
+    --bg:#0f1419; --panel:#1a212b; --panel2:#222c38; --line:#2c3744;
+    --text:#e6edf3; --muted:#8b98a5; --accent:#3b82f6; --accent2:#2563eb;
+    --good:#22c55e; --bad:#ef4444; --warn:#f59e0b;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; gap:16px; padding:12px 20px; background:var(--panel); border-bottom:1px solid var(--line); }
+  header h1 { font-size:16px; margin:0; font-weight:600; }
+  header h1 .c { color:var(--accent); }
+  header .who { margin-left:auto; font-size:12px; color:var(--muted); }
+  nav { display:flex; gap:2px; padding:0 20px; background:var(--panel); border-bottom:1px solid var(--line); }
+  nav button { background:none; border:none; color:var(--muted); padding:12px 18px; cursor:pointer; font-size:14px; border-bottom:2px solid transparent; }
+  nav button.active { color:var(--text); border-bottom-color:var(--accent); }
+  main { padding:20px; max-width:1200px; margin:0 auto; }
+  .tab { display:none; } .tab.active { display:block; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:16px; margin-bottom:16px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .grow { flex:1; }
+  h2 { font-size:15px; margin:0 0 12px; }
+  label.fld { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
+  input, select { background:var(--panel2); border:1px solid var(--line); color:var(--text); border-radius:6px; padding:8px 10px; font-size:14px; }
+  input:focus, select:focus { outline:none; border-color:var(--accent); }
+  button.btn { background:var(--accent); color:#fff; border:none; border-radius:6px; padding:8px 14px; cursor:pointer; font-size:13px; font-weight:500; }
+  button.btn:hover { background:var(--accent2); }
+  button.btn.ghost { background:var(--panel2); color:var(--text); border:1px solid var(--line); }
+  button.btn.danger { background:var(--bad); }
+  button.btn.small { padding:5px 10px; font-size:12px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:500; font-size:12px; text-transform:uppercase; letter-spacing:.03em; }
+  tr.click:hover td { background:var(--panel2); cursor:pointer; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--bad); margin-right:6px; }
+  .dot.on { background:var(--good); }
+  .tag { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; }
+  .tag.printed { background:#14432a; color:#86efac; } .tag.failed { background:#451a1a; color:#fca5a5; }
+  .tag.queued { background:#1e3a5f; color:#93c5fd; } .tag.drift { background:#43360f; color:#fcd34d; }
+  .empty { color:var(--muted); text-align:center; padding:30px; }
+  .muted { color:var(--muted); } .mono { font-family:ui-monospace,Menlo,monospace; }
+  code { background:var(--panel2); padding:2px 6px; border-radius:4px; font-size:12px; }
+  pre { background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:12px; overflow:auto; font-size:12px; white-space:pre-wrap; }
+  .switch { display:flex; align-items:center; gap:10px; }
+  .toggle { position:relative; width:46px; height:24px; } .toggle input { display:none; }
+  .toggle span { position:absolute; inset:0; background:var(--panel2); border:1px solid var(--line); border-radius:24px; cursor:pointer; transition:.2s; }
+  .toggle span:before { content:""; position:absolute; width:18px; height:18px; left:3px; top:2px; background:#fff; border-radius:50%; transition:.2s; }
+  .toggle input:checked + span { background:var(--accent); }
+  .toggle input:checked + span:before { transform:translateX(22px); }
+  #toast { position:fixed; bottom:20px; right:20px; display:flex; flex-direction:column; gap:8px; z-index:60; }
+  .toast { background:var(--panel2); border:1px solid var(--line); border-left:3px solid var(--accent); padding:10px 14px; border-radius:6px; font-size:13px; }
+  .toast.bad { border-left-color:var(--bad); } .toast.good { border-left-color:var(--good); }
+  .back { color:var(--accent); cursor:pointer; font-size:13px; }
+  .prow { display:flex; gap:8px; align-items:center; margin-bottom:6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Label Hub <span class="c">Control</span></h1>
+  <div class="who" id="who">…</div>
+</header>
+<nav>
+  <button data-tab="fleet" class="active">Fleet</button>
+  <button data-tab="enroll">Enrollment</button>
+</nav>
+
+<main>
+  <section class="tab active" id="tab-fleet">
+    <div id="fleetList">
+      <div class="panel">
+        <div class="row"><h2 class="grow">Sites &amp; nodes</h2><button class="btn ghost small" onclick="loadFleet()">Refresh</button></div>
+        <table>
+          <thead><tr><th>Site</th><th>Host</th><th>Status</th><th>Version</th><th>Queue</th><th>Last seen</th></tr></thead>
+          <tbody id="fleetBody"></tbody>
+        </table>
+        <div class="empty" id="fleetEmpty">No nodes enrolled yet. Create an enrollment token under Enrollment.</div>
+      </div>
+    </div>
+
+    <div id="nodeDetail" style="display:none"></div>
+  </section>
+
+  <section class="tab" id="tab-enroll">
+    <div class="panel">
+      <h2>Create enrollment token</h2>
+      <div class="row">
+        <label class="fld">Site<input id="enSite" placeholder="PLANT1"></label>
+        <label class="fld grow">Note<input id="enNote" placeholder="back-dock Pi"></label>
+        <button class="btn" style="align-self:flex-end" onclick="createToken()">Create</button>
+      </div>
+      <div id="tokenOut"></div>
+    </div>
+    <div class="panel">
+      <h2>Tokens</h2>
+      <table><thead><tr><th>Site</th><th>Note</th><th>Token</th><th>Used</th></tr></thead><tbody id="tokenBody"></tbody></table>
+      <div class="empty" id="tokenEmpty">No tokens yet.</div>
+    </div>
+  </section>
+</main>
+
+<div id="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>

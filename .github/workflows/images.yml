@@ -1,0 +1,76 @@
+name: build-pi-images
+
+# Builds the two Raspberry Pi images (arm64 + armhf) and publishes them as
+# release artifacts. pi-gen needs a privileged Linux runner with Docker.
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  binaries:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: arm64
+            target: aarch64-unknown-linux-gnu
+          - arch: armhf
+            target: arm-unknown-linux-gnueabihf
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cross
+        run: cargo install cross --locked
+      - name: Cross-compile node
+        run: cross build --release -p label-hub --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: node-${{ matrix.arch }}
+          path: target/${{ matrix.target }}/release/label-hub
+
+  images:
+    needs: binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [arm64, armhf]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: node-${{ matrix.arch }}
+          path: ./node-bin
+      - name: Stage files
+        run: |
+          STAGE=images/pi-gen/stage-labelhub/files
+          mkdir -p "$STAGE/web"
+          install -m 0755 node-bin/label-hub "$STAGE/label-hub"
+          cp -r web/. "$STAGE/web/"
+          cp deploy/label-hub.service "$STAGE/"
+          cp images/firstboot/labelhub-firstboot.service "$STAGE/"
+          cp images/firstboot/labelhub-firstboot.sh "$STAGE/"
+          cp images/labelhub.conf.example "$STAGE/"
+      - name: Build image with pi-gen
+        run: |
+          git clone --depth=1 https://github.com/RPi-Distro/pi-gen
+          cp -r images/pi-gen/stage-labelhub pi-gen/stage-labelhub
+          cat > pi-gen/config <<EOF
+          IMG_NAME=labelhub-${{ matrix.arch }}
+          RELEASE=bookworm
+          ARCH=${{ matrix.arch }}
+          DEPLOY_COMPRESSION=xz
+          TARGET_HOSTNAME=printlabels
+          DISABLE_FIRST_BOOT_USER_RENAME=1
+          STAGE_LIST="stage0 stage1 stage2 stage-labelhub"
+          EOF
+          cd pi-gen && sudo ./build-docker.sh
+      - name: Checksums
+        run: cd pi-gen/deploy && sha256sum *.img.xz > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-${{ matrix.arch }}
+          path: |
+            pi-gen/deploy/*.img.xz
+            pi-gen/deploy/SHA256SUMS

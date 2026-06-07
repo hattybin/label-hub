@@ -1,0 +1,13 @@
+[Unit]
+Description=Label Hub first-boot provisioning
+After=network-online.target tailscaled.service
+Wants=network-online.target
+ConditionPathExists=/usr/local/sbin/labelhub-firstboot.sh
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/labelhub-firstboot.sh
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target
