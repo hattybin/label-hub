@@ -45,7 +45,8 @@ ASSET_NAME="label-hub-${ARCH}"
 echo "→ Pulling source..."
 if [ -d "$SRC_DIR/.git" ]; then
   git -C "$SRC_DIR" remote set-url origin "https://${PAT}@github.com/${REPO}.git" 2>/dev/null || true
-  git -C "$SRC_DIR" pull --ff-only
+  git -C "$SRC_DIR" fetch origin
+  git -C "$SRC_DIR" reset --hard origin/main
 else
   echo "ERROR: $SRC_DIR is not a git repo. Run first-time setup (see script header)." >&2
   exit 1
