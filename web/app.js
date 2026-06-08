@@ -1,21 +1,10 @@
 'use strict';
 
-// ── Local state ──────────────────────────────────────────────────────────────
-let queueJobs = [];
-let historyJobs = [];
 let printers = [];
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-
-function fmtTime(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (isNaN(d)) return iso;
-  return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
 
 function toast(msg, kind = '') {
   const el = document.createElement('div');
@@ -33,144 +22,8 @@ async function api(path, opts) {
   return body;
 }
 
-function statusTag(s) {
-  return `<span class="tag ${esc(s)}">${esc(s)}</span>`;
-}
-
-// ── Tab switching ────────────────────────────────────────────────────────────
-document.querySelectorAll('nav button').forEach((b) => {
-  b.onclick = () => {
-    document.querySelectorAll('nav button').forEach((x) => x.classList.remove('active'));
-    document.querySelectorAll('.tab').forEach((x) => x.classList.remove('active'));
-    b.classList.add('active');
-    $('tab-' + b.dataset.tab).classList.add('active');
-    if (b.dataset.tab === 'reprint') loadHistory();
-    if (b.dataset.tab === 'site') { loadPrinters(); loadHealth(); }
-  };
-});
-
-// ── Receiving Queue ──────────────────────────────────────────────────────────
-async function loadQueue() {
-  try { queueJobs = await api('/api/jobs'); renderQueue(); }
-  catch (e) { toast('Load queue failed: ' + e.message, 'bad'); }
-}
-
-function renderQueue() {
-  const body = $('queueBody');
-  body.innerHTML = '';
-  const active = queueJobs.filter((j) => j.status === 'queued' || j.status === 'failed');
-  $('queueEmpty').style.display = active.length ? 'none' : 'block';
-  const badge = $('queueBadge');
-  if (active.length) { badge.style.display = 'inline-block'; badge.textContent = active.length; }
-  else badge.style.display = 'none';
-
-  for (const j of active) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${fmtTime(j.received_at)}</td>
-      <td class="mono">${esc(j.printer)}</td>
-      <td>${esc(j.source)}</td>
-      <td>${j.label_count}</td>
-      <td>${statusTag(j.status)}${j.error ? ` <span class="muted" title="${esc(j.error)}">⚠</span>` : ''}</td>
-      <td style="text-align:right; white-space:nowrap">
-        <button class="btn small" onclick="printJob('${j.id}')">Print</button>
-        <button class="btn ghost small" onclick="previewJob('${j.id}','queue')">Preview</button>
-        <button class="btn ghost small" onclick="dismissJob('${j.id}')">Dismiss</button>
-      </td>`;
-    body.appendChild(tr);
-  }
-}
-
-async function printJob(id) {
-  try { await api(`/api/jobs/${id}/print`, { method: 'POST' }); toast('Sent to printer', 'good'); }
-  catch (e) { toast('Print failed: ' + e.message, 'bad'); }
-}
-
-async function dismissJob(id) {
-  if (!confirm('Dismiss this label without printing?')) return;
-  try { await api(`/api/jobs/${id}/dismiss`, { method: 'POST' }); }
-  catch (e) { toast('Dismiss failed: ' + e.message, 'bad'); }
-}
-
-// ── Reprint Console ──────────────────────────────────────────────────────────
-async function loadHistory() {
-  try { historyJobs = await api('/api/jobs/history'); renderHistory(); }
-  catch (e) { toast('Load history failed: ' + e.message, 'bad'); }
-}
-
-function renderHistory() {
-  const f = ($('histFilter').value || '').toLowerCase();
-  const rows = historyJobs.filter((j) =>
-    !f || (j.printer + ' ' + j.status + ' ' + j.source).toLowerCase().includes(f));
-  const body = $('histBody');
-  body.innerHTML = '';
-  $('histEmpty').style.display = rows.length ? 'none' : 'block';
-  for (const j of rows) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${fmtTime(j.printed_at || j.received_at)}</td>
-      <td class="mono">${esc(j.printer)}</td>
-      <td>${esc(j.source)}</td>
-      <td>${j.label_count}</td>
-      <td>${statusTag(j.status)}${j.error ? ` <span class="muted" title="${esc(j.error)}">⚠</span>` : ''}</td>
-      <td style="text-align:right; white-space:nowrap">
-        <button class="btn small" onclick="reprintModal('${j.id}')">Reprint</button>
-        <button class="btn ghost small" onclick="previewJob('${j.id}','history')">Preview</button>
-      </td>`;
-    body.appendChild(tr);
-  }
-}
-
-function reprintModal(id) {
-  const job = historyJobs.find((j) => j.id === id);
-  if (!job) return;
-  const opts = printers.map((p) =>
-    `<option value="${esc(p.name)}" ${p.name === job.printer ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
-  $('modalContent').innerHTML = `
-    <h2>Reprint label</h2>
-    <p class="muted">Originally printed to <code>${esc(job.printer)}</code>.</p>
-    <label class="fld">Printer
-      <select id="reprintPrinter">${opts || `<option value="${esc(job.printer)}">${esc(job.printer)}</option>`}</select>
-    </label>
-    <div style="margin-top:12px"><button class="btn" onclick="doReprint('${id}')">Print</button></div>`;
-  $('modalBg').classList.add('show');
-}
-
-async function doReprint(id) {
-  const printer = $('reprintPrinter').value;
-  try {
-    await api(`/api/jobs/${id}/print?printer=${encodeURIComponent(printer)}`, { method: 'POST' });
-    toast('Reprinted to ' + printer, 'good');
-    closeModal();
-    loadHistory();
-  } catch (e) { toast('Reprint failed: ' + e.message, 'bad'); }
-}
-
-// ── Preview (Labelary) ───────────────────────────────────────────────────────
-async function previewJob(id, where) {
-  const list = where === 'history' ? historyJobs : queueJobs;
-  const job = list.find((j) => j.id === id);
-  if (!job) return;
-  $('modalContent').innerHTML = '<h2>Preview</h2><p class="muted">Rendering…</p>';
-  $('modalBg').classList.add('show');
-  try {
-    const r = await api('/api/preview-label', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ zpl: job.zpl }),
-    });
-    $('modalContent').innerHTML = `<h2>Preview · ${esc(job.printer)}</h2><img src="${r.image}">`;
-  } catch (e) {
-    $('modalContent').innerHTML = `<h2>Preview</h2><p class="muted">Could not render: ${esc(e.message)}</p>`;
-  }
-}
-
-function closeModal(ev) {
-  if (ev && ev.target !== $('modalBg')) return;
-  $('modalBg').classList.remove('show');
-}
-
 // ── Printers ─────────────────────────────────────────────────────────────────
+
 async function loadPrinters() {
   try { printers = await api('/api/printers'); renderPrinters(); }
   catch (e) { toast('Load printers failed: ' + e.message, 'bad'); }
@@ -234,21 +87,7 @@ async function testPrinter(name, ip, port) {
   } catch (e) { if (cell) cell.textContent = 'error'; }
 }
 
-// ── Settings / health ────────────────────────────────────────────────────────
-$('autoPrint').onchange = async (e) => {
-  try {
-    await api('/api/settings', {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ auto_print: e.target.checked }),
-    });
-    toast('Auto-print ' + (e.target.checked ? 'on' : 'off'), 'good');
-  } catch (err) { toast('Update failed: ' + err.message, 'bad'); e.target.checked = !e.target.checked; }
-};
-
-async function loadSettings() {
-  try { const s = await api('/api/settings'); $('autoPrint').checked = !!s.auto_print; }
-  catch (e) { /* ignore */ }
-}
+// ── Health ────────────────────────────────────────────────────────────────────
 
 let lastHealth = null;
 
@@ -276,7 +115,6 @@ async function loadHealth() {
 
 function renderD365Help() {
   const base = (lastHealth && lastHealth.publicUrl) || 'https://<your-tunnel-host>';
-  const url = base + '/api/print/inbound';
   $('d365Help').textContent =
 `External service operation (Warehouse management > Setup > External services):
   HTTP method      : POST
@@ -290,49 +128,17 @@ function renderD365Help() {
     X-Printer-Name : $label.printer$
 
 External service instance:
-  Base URL           : ${base}     (your public tunnel/relay host)
+  Base URL             : ${base}     (your public tunnel/relay host)
   Authentication secret: <the INBOUND_SECRET from .env>
 
 Label printers (Document routing > Label printers):
-  Connection type            : External label service
-  Label print service instance: <the instance above>
-  Label print service printer name: <name matching a printer profile here>
+  Connection type              : External label service
+  Label print service instance : <the instance above>
+  Printer name                 : <name matching a printer profile here>
 
-Full inbound endpoint: ${url}`;
+Full inbound endpoint: ${base}/api/print/inbound`;
 }
 
-// ── Live updates (SSE) ───────────────────────────────────────────────────────
-function connectSSE() {
-  const es = new EventSource('/api/queue-events');
-  es.onopen = () => { $('liveDot').classList.add('on'); $('liveText').textContent = 'live'; };
-  es.onerror = () => { $('liveDot').classList.remove('on'); $('liveText').textContent = 'reconnecting…'; };
-  es.onmessage = (ev) => {
-    let msg; try { msg = JSON.parse(ev.data); } catch { return; }
-    switch (msg.type) {
-      case 'backlog':
-        queueJobs = msg.jobs || []; renderQueue(); break;
-      case 'new_job':
-        queueJobs.unshift(msg.job); renderQueue();
-        toast('New label for ' + msg.job.printer); break;
-      case 'job_update':
-        // remove from queue if present; refresh history view if visible
-        queueJobs = queueJobs.filter((j) => j.id !== msg.job.id);
-        renderQueue();
-        if ($('tab-reprint').classList.contains('active')) loadHistory();
-        break;
-      case 'job_dismissed':
-        queueJobs = queueJobs.filter((j) => j.id !== msg.id); renderQueue(); break;
-      case 'job_error':
-        toast('Print error: ' + msg.error, 'bad');
-        loadQueue(); break;
-      case 'settings':
-        if (msg.settings) $('autoPrint').checked = !!msg.settings.auto_print; break;
-    }
-  };
-}
-
-// ── Init ─────────────────────────────────────────────────────────────────────
-loadSettings();
-loadQueue();
+// ── Init ──────────────────────────────────────────────────────────────────────
 loadHealth();
-connectSSE();
+loadPrinters();

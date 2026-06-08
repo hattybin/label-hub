@@ -78,6 +78,14 @@
   .preview-modal .close { position:absolute; top:20px; right:24px; color:#fff;
                           background:none; border:none; font-size:28px; cursor:pointer; }
   .bulk-bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .toggle { position:relative; width:40px; height:22px; flex-shrink:0; }
+  .toggle input { display:none; }
+  .toggle span { position:absolute; inset:0; background:var(--panel2); border:1px solid var(--line);
+                 border-radius:22px; cursor:pointer; transition:.2s; }
+  .toggle span:before { content:""; position:absolute; width:16px; height:16px; left:2px; top:2px;
+                        background:#fff; border-radius:50%; transition:.2s; }
+  .toggle input:checked + span { background:var(--accent); border-color:var(--accent); }
+  .toggle input:checked + span:before { transform:translateX(18px); }
 </style>
 </head>
 <body>
@@ -95,6 +103,10 @@
       <input id="binInput" type="text" style="width:100px" placeholder="A-01-B">
     </label>
     <button class="btn ghost small" onclick="testPrinter()">Test Printer</button>
+    <label style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);cursor:pointer">
+      <label class="toggle"><input type="checkbox" id="autoPrintToggle"><span></span></label>
+      Auto-print
+    </label>
   </div>
 </header>
 
@@ -275,8 +287,10 @@ const state = {
 document.addEventListener('DOMContentLoaded', () => {
   loadPrinters();
   restoreSettings();
+  loadAutoprint();
   document.getElementById('binInput').addEventListener('input', saveBin);
   document.getElementById('printerSel').addEventListener('change', savePrinter);
+  document.getElementById('autoPrintToggle').addEventListener('change', saveAutoprint);
 });
 
 function restoreSettings() {
@@ -293,6 +307,27 @@ function saveBin() {
 
 function savePrinter() {
   localStorage.setItem('rl_printer', document.getElementById('printerSel').value);
+}
+
+async function loadAutoprint() {
+  try {
+    const s = await api('/api/settings');
+    document.getElementById('autoPrintToggle').checked = !!s.auto_print;
+  } catch {}
+}
+
+async function saveAutoprint(e) {
+  try {
+    await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ auto_print: e.target.checked }),
+    });
+    toast('ok', 'Auto-print ' + (e.target.checked ? 'on' : 'off'));
+  } catch (err) {
+    toast('error', 'Failed: ' + err.message);
+    e.target.checked = !e.target.checked;
+  }
 }
 
 async function loadPrinters() {
