@@ -70,6 +70,8 @@ async fn main() {
         .route("/api/test-printer", get(routes::printers::test))
         .route("/api/preview-label", post(routes::preview::preview))
         .route("/api/settings", get(routes::settings::get).put(routes::settings::put))
+        .route("/api/receiving-labels/print", post(routes::receiving_labels::print))
+        .route("/api/receiving-labels/preview", post(routes::receiving_labels::preview))
         .route("/api/admin/refresh", post(routes::settings::refresh))
         .route("/api/admin/update", post(routes::settings::update))
         .route("/api/health", get(routes::settings::health))

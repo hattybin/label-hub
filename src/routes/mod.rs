@@ -3,6 +3,7 @@ pub mod inbound;
 pub mod jobs;
 pub mod preview;
 pub mod printers;
+pub mod receiving_labels;
 pub mod settings;
 
 use crate::state::{AppState, Printer};

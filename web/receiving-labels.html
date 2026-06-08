@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Receiving Labels — Label Hub</title>
+<style>
+  :root {
+    --bg:#0f1419; --panel:#1a212b; --panel2:#222c38; --line:#2c3744;
+    --text:#e6edf3; --muted:#8b98a5; --accent:#3b82f6; --accent2:#2563eb;
+    --good:#22c55e; --bad:#ef4444; --warn:#f59e0b;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+         background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; gap:16px; padding:12px 20px;
+           background:var(--panel); border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0; font-weight:600; }
+  header a { color:var(--muted); font-size:12px; text-decoration:none; }
+  header a:hover { color:var(--text); }
+  .header-right { margin-left:auto; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  nav { display:flex; gap:2px; padding:0 20px; background:var(--panel);
+        border-bottom:1px solid var(--line); overflow-x:auto; }
+  nav button { background:none; border:none; color:var(--muted); padding:12px 18px;
+               cursor:pointer; font-size:14px; border-bottom:2px solid transparent; white-space:nowrap; }
+  nav button.active { color:var(--text); border-bottom-color:var(--accent); }
+  main { padding:20px; max-width:1300px; margin:0 auto; }
+  .tab { display:none; }
+  .tab.active { display:block; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+           padding:16px; margin-bottom:16px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .grow { flex:1; min-width:120px; }
+  h2 { font-size:15px; margin:0 0 12px; }
+  h3 { font-size:13px; margin:8px 0 4px; color:var(--muted); font-weight:500; }
+  label.fld { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
+  input, select { background:var(--panel2); border:1px solid var(--line); color:var(--text);
+                  border-radius:6px; padding:8px 10px; font-size:14px; width:100%; }
+  input:focus, select:focus { outline:none; border-color:var(--accent); }
+  input[type=number] { width:80px; }
+  button.btn { background:var(--accent); color:#fff; border:none; border-radius:6px;
+               padding:8px 14px; cursor:pointer; font-size:13px; font-weight:500; }
+  button.btn:hover { background:var(--accent2); }
+  button.btn.ghost { background:var(--panel2); color:var(--text); border:1px solid var(--line); }
+  button.btn.ghost:hover { border-color:var(--accent); }
+  button.btn.danger { background:var(--bad); }
+  button.btn.small { padding:5px 10px; font-size:12px; }
+  button.btn.icon { padding:5px 8px; font-size:12px; }
+  .print-bar { display:flex; align-items:center; gap:12px; margin-top:16px; }
+  .total-badge { background:var(--accent); color:#fff; border-radius:12px; padding:3px 12px;
+                 font-size:13px; font-weight:600; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  th { color:var(--muted); font-weight:500; font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
+  tr:hover td { background:var(--panel2); }
+  td input { padding:5px 8px; font-size:13px; }
+  td input[type=number] { width:72px; }
+  td input[type=text] { width:100%; min-width:80px; }
+  .empty { color:var(--muted); text-align:center; padding:40px; }
+  .info-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:8px 16px; }
+  .info-item { font-size:12px; }
+  .info-item span { color:var(--muted); display:block; }
+  .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+           background:var(--panel); border:1px solid var(--line); border-radius:8px;
+           padding:12px 20px; font-size:14px; z-index:99; display:none;
+           box-shadow:0 4px 24px #0006; max-width:380px; text-align:center; }
+  .toast.show { display:block; }
+  .toast.ok { border-color:var(--good); color:var(--good); }
+  .toast.err { border-color:var(--bad); color:var(--bad); }
+  .spinner { display:inline-block; width:14px; height:14px; border:2px solid var(--line);
+             border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite;
+             vertical-align:middle; margin-right:6px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .preview-modal { position:fixed; inset:0; background:#0009; display:none;
+                   align-items:center; justify-content:center; z-index:50; }
+  .preview-modal.show { display:flex; }
+  .preview-modal img { max-width:90vw; max-height:80vh; border-radius:8px; box-shadow:0 4px 40px #000; }
+  .preview-modal .close { position:absolute; top:20px; right:24px; color:#fff;
+                          background:none; border:none; font-size:28px; cursor:pointer; }
+  .bulk-bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Receiving Labels</h1>
+  <a href="/">← Label Hub</a>
+  <div class="header-right">
+    <label class="fld" style="flex-direction:row;align-items:center;gap:8px;margin:0">
+      <span>Printer</span>
+      <select id="printerSel" style="width:160px"></select>
+    </label>
+    <label class="fld" style="flex-direction:row;align-items:center;gap:8px;margin:0">
+      <span>Bin</span>
+      <input id="binInput" type="text" style="width:100px" placeholder="A-01-B">
+    </label>
+    <button class="btn ghost small" onclick="testPrinter()">Test Printer</button>
+  </div>
+</header>
+
+<nav>
+  <button class="active" onclick="switchTab('po',this)">By PO</button>
+  <button onclick="switchTab('receipt',this)">By Receipt</button>
+  <button onclick="switchTab('dashboard',this)">Dashboard</button>
+  <button onclick="switchTab('product',this)">Product Label</button>
+</nav>
+
+<main>
+
+<!-- ── By PO ─────────────────────────────────────────────────────────────── -->
+<div id="tab-po" class="tab active">
+  <div class="panel">
+    <h2>Purchase Order</h2>
+    <div class="row">
+      <label class="fld grow"><span>PO Number</span>
+        <input id="poInput" type="text" placeholder="e.g. PO-12345"
+               onkeydown="if(event.key==='Enter')loadPo()">
+      </label>
+      <button class="btn" onclick="loadPo()" style="margin-top:20px">Load</button>
+    </div>
+  </div>
+
+  <div id="poHeader" class="panel" style="display:none">
+    <h2>PO Details</h2>
+    <div id="poHeaderInfo" class="info-grid"></div>
+    <div class="row" style="margin-top:12px">
+      <label class="fld grow"><span>Apply Received Qty from Receipt</span>
+        <select id="poReceiptSel">
+          <option value="">— none —</option>
+        </select>
+      </label>
+      <button class="btn ghost small" onclick="applyReceiptQty()" style="margin-top:20px">Apply Quantities</button>
+    </div>
+  </div>
+
+  <div id="poLines" style="display:none">
+    <div class="bulk-bar">
+      <button class="btn ghost small" onclick="setAllQty('po','remaining')">Set All → Remaining</button>
+      <button class="btn ghost small" onclick="setAllQty('po','ordered')">Set All → Ordered</button>
+      <button class="btn ghost small" onclick="clearAllQty('po')">Clear All</button>
+    </div>
+    <div class="panel" style="overflow-x:auto">
+      <table id="poTable">
+        <thead><tr>
+          <th>Item</th><th>Description</th><th>Ordered</th><th>Remaining</th>
+          <th>Unit</th><th>Batch</th><th>Labels</th><th></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="print-bar">
+      <button class="btn" onclick="printLabels('po')">Print to Printer</button>
+      <span class="total-badge" id="poTotal">0 labels</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── By Receipt ─────────────────────────────────────────────────────────── -->
+<div id="tab-receipt" class="tab">
+  <div class="panel">
+    <h2>Product Receipt</h2>
+    <div class="row">
+      <label class="fld grow"><span>Receipt Number</span>
+        <input id="receiptInput" type="text" placeholder="e.g. REC-00123"
+               onkeydown="if(event.key==='Enter')loadReceipt()">
+      </label>
+      <button class="btn" onclick="loadReceipt()" style="margin-top:20px">Load</button>
+    </div>
+  </div>
+
+  <div id="receiptHeader" class="panel" style="display:none">
+    <h2>Receipt Details</h2>
+    <div id="receiptHeaderInfo" class="info-grid"></div>
+  </div>
+
+  <div id="receiptLines" style="display:none">
+    <div class="bulk-bar">
+      <button class="btn ghost small" onclick="setAllQty('receipt','received')">Set All → Received Qty</button>
+      <button class="btn ghost small" onclick="clearAllQty('receipt')">Clear All</button>
+    </div>
+    <div class="panel" style="overflow-x:auto">
+      <table id="receiptTable">
+        <thead><tr>
+          <th>Item</th><th>Description</th><th>Received</th>
+          <th>Unit</th><th>Batch</th><th>Wh / Bin</th><th>Labels</th><th></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="print-bar">
+      <button class="btn" onclick="printLabels('receipt')">Print to Printer</button>
+      <span class="total-badge" id="receiptTotal">0 labels</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── Dashboard ─────────────────────────────────────────────────────────── -->
+<div id="tab-dashboard" class="tab">
+  <div class="panel">
+    <h2>Recent Receipts</h2>
+    <div class="row">
+      <label class="fld"><span>Days Back</span>
+        <input id="daysBack" type="number" value="7" min="0" style="width:80px">
+      </label>
+      <label class="fld"><span>Days Forward</span>
+        <input id="daysForward" type="number" value="0" min="0" style="width:80px">
+      </label>
+      <button class="btn" onclick="loadDashboard()" style="margin-top:20px">Refresh</button>
+    </div>
+  </div>
+  <div class="panel" style="overflow-x:auto">
+    <table id="dashTable">
+      <thead><tr><th>Date</th><th>Receipt #</th><th>PO #</th><th>Warehouse</th><th></th></tr></thead>
+      <tbody><tr><td colspan="5" class="empty">Click Refresh to load</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── Product Label ──────────────────────────────────────────────────────── -->
+<div id="tab-product" class="tab">
+  <div class="panel">
+    <h2>Product Label</h2>
+    <div class="row">
+      <label class="fld grow"><span>Item Number</span>
+        <input id="productInput" type="text" placeholder="e.g. 0000907"
+               onkeydown="if(event.key==='Enter')loadProduct()">
+      </label>
+      <button class="btn" onclick="loadProduct()" style="margin-top:20px">Load Item</button>
+    </div>
+  </div>
+
+  <div id="productPanel" class="panel" style="display:none">
+    <h2>Label</h2>
+    <div class="info-grid" id="productInfo" style="margin-bottom:14px"></div>
+    <div class="row">
+      <label class="fld grow"><span>Description Override</span>
+        <input id="productDesc" type="text">
+      </label>
+      <label class="fld"><span>Batch #</span>
+        <input id="productBatch" type="text" style="width:140px">
+      </label>
+      <label class="fld"><span>Count</span>
+        <input id="productCount" type="number" value="1" min="1" max="999" style="width:80px">
+      </label>
+    </div>
+    <div class="print-bar" style="margin-top:14px">
+      <button class="btn" onclick="printProductLabel()">Print to Printer</button>
+      <button class="btn ghost" onclick="previewProductLabel()">Preview</button>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<!-- Preview modal -->
+<div id="previewModal" class="preview-modal" onclick="closePreview(event)">
+  <button class="close" onclick="closePreview()">×</button>
+  <img id="previewImg" src="" alt="label preview">
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+
+const state = {
+  po: null,           // { header, lines }
+  receipt: null,      // { header, lines }
+  productDescs: {},   // itemNumber → { desc, searchName, productName, unit }
+  product: null,      // single product
+};
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadPrinters();
+  restoreSettings();
+  document.getElementById('binInput').addEventListener('input', saveBin);
+  document.getElementById('printerSel').addEventListener('change', savePrinter);
+});
+
+function restoreSettings() {
+  const bin = localStorage.getItem('rl_bin') || '';
+  const printer = localStorage.getItem('rl_printer') || '';
+  document.getElementById('binInput').value = bin;
+  // printer restored after loadPrinters()
+  window._savedPrinter = printer;
+}
+
+function saveBin() {
+  localStorage.setItem('rl_bin', document.getElementById('binInput').value);
+}
+
+function savePrinter() {
+  localStorage.setItem('rl_printer', document.getElementById('printerSel').value);
+}
+
+async function loadPrinters() {
+  const printers = await api('/api/printers');
+  const sel = document.getElementById('printerSel');
+  sel.innerHTML = printers.length
+    ? printers.map(p => `<option value="${esc(p.name)}">${esc(p.name)} (${esc(p.ip)})</option>`).join('')
+    : '<option value="">No printers configured</option>';
+  if (window._savedPrinter) {
+    sel.value = window._savedPrinter;
+  }
+}
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ── By PO ────────────────────────────────────────────────────────────────────
+
+async function loadPo() {
+  const po = document.getElementById('poInput').value.trim();
+  if (!po) return;
+  try {
+    showLoading(true);
+    const data = await api(`/api/d365/po/${encodeURIComponent(po)}`);
+    state.po = data;
+    renderPoHeader(data.header);
+    await loadPoReceipts(po);
+    renderPoLines(data.lines);
+    enrichDescs('po');
+    document.getElementById('poHeader').style.display = '';
+    document.getElementById('poLines').style.display = '';
+  } catch(e) {
+    toast('error', e.message || 'Failed to load PO');
+  } finally {
+    showLoading(false);
+  }
+}
+
+function renderPoHeader(h) {
+  const fields = [
+    ['PO #', h.PurchaseOrderNumber],
+    ['Vendor', h.OrderVendorAccountNumber],
+    ['Vendor Name', h.PurchaseName || h.VendorName || ''],
+    ['Status', h.PurchaseOrderStatus || h.DocumentStatus || ''],
+    ['Delivery Date', fmtDate(h.DeliveryDate || h.RequestedDeliveryDate)],
+  ];
+  document.getElementById('poHeaderInfo').innerHTML =
+    fields.map(([k,v]) => `<div class="info-item"><span>${k}</span>${esc(v||'—')}</div>`).join('');
+}
+
+async function loadPoReceipts(po) {
+  try {
+    const receipts = await api(`/api/d365/receipts-for-po/${encodeURIComponent(po)}`);
+    const sel = document.getElementById('poReceiptSel');
+    sel.innerHTML = '<option value="">— none —</option>' +
+      receipts.map(r => {
+        const n = strField(r, ['ProductReceiptNumber','PackingSlipId','ReceiptNumber']);
+        const d = fmtDate(strField(r, ['ProductReceiptDate','TransactionDate','PackingSlipDate']));
+        return `<option value="${esc(n)}">${esc(n)} — ${esc(d)}</option>`;
+      }).join('');
+  } catch {}
+}
+
+async function applyReceiptQty() {
+  const sel = document.getElementById('poReceiptSel');
+  const receiptNum = sel.value;
+  if (!receiptNum || !state.po) return;
+  try {
+    const data = await api(`/api/d365/receipt/${encodeURIComponent(receiptNum)}`);
+    const lines = data.lines || [];
+    // map by item number
+    const byItem = {};
+    lines.forEach(l => {
+      const item = strField(l, ['ItemNumber']);
+      if (item) byItem[item] = parseFloat(strField(l, ['ReceivedPurchaseQuantity','ReceivedCatchWeightQuantity','Quantity'])) || 0;
+    });
+    document.querySelectorAll('#poTable tbody tr').forEach(tr => {
+      const item = tr.dataset.item;
+      if (item && byItem[item] !== undefined) {
+        const countInput = tr.querySelector('.cnt');
+        countInput.value = Math.ceil(byItem[item]);
+        updateTotal('po');
+      }
+    });
+  } catch(e) {
+    toast('error', 'Could not load receipt: ' + (e.message || ''));
+  }
+}
+
+function renderPoLines(lines) {
+  const tbody = document.querySelector('#poTable tbody');
+  tbody.innerHTML = '';
+  if (!lines.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">No lines</td></tr>';
+    return;
+  }
+  lines.forEach((l, i) => {
+    const item = strField(l, ['ItemNumber']);
+    const desc = strField(l, ['LineDescription','ProcurementProductName','ItemName','Name']);
+    const ordered = parseFloat(strField(l, ['OrderedPurchaseQuantity','PurchaseQuantity'])) || 0;
+    const remaining = parseFloat(strField(l, ['RemainingPurchaseQuantity','OpenPurchaseQuantity'])) || 0;
+    const unit = strField(l, ['PurchaseUnitSymbol','UnitSymbol','Unit']);
+    const wh = strField(l, ['ReceivingWarehouseId','InventLocationId']);
+    const config = strField(l, ['ProductConfigurationId']);
+    const size = strField(l, ['ProductSizeId']);
+    const color = strField(l, ['ProductColorId']);
+    const tr = document.createElement('tr');
+    tr.dataset.item = item;
+    tr.dataset.idx = i;
+    tr.dataset.ordered = ordered;
+    tr.dataset.remaining = remaining;
+    tr.dataset.unit = unit;
+    tr.dataset.wh = wh;
+    tr.dataset.config = config;
+    tr.dataset.size = size;
+    tr.dataset.color = color;
+    tr.innerHTML = `
+      <td>${esc(item)}</td>
+      <td><input type="text" class="desc" value="${esc(desc)}" style="min-width:160px"></td>
+      <td>${ordered}</td>
+      <td>${remaining}</td>
+      <td>${esc(unit)}</td>
+      <td><input type="text" class="batch" placeholder="batch #" style="width:120px"></td>
+      <td><input type="number" class="cnt" value="0" min="0" max="999" oninput="updateTotal('po')"></td>
+      <td><button class="btn ghost icon" onclick="previewRow(this,'po')">👁</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  updateTotal('po');
+}
+
+// ── By Receipt ────────────────────────────────────────────────────────────────
+
+async function loadReceipt(receiptNum) {
+  const input = receiptNum || document.getElementById('receiptInput').value.trim();
+  if (!input) return;
+  document.getElementById('receiptInput').value = input;
+  switchTabByName('receipt');
+  try {
+    showLoading(true);
+    const data = await api(`/api/d365/receipt/${encodeURIComponent(input)}`);
+    state.receipt = data;
+    renderReceiptHeader(data.header);
+    renderReceiptLines(data.lines);
+    enrichDescs('receipt');
+    document.getElementById('receiptHeader').style.display = '';
+    document.getElementById('receiptLines').style.display = '';
+  } catch(e) {
+    toast('error', e.message || 'Failed to load receipt');
+  } finally {
+    showLoading(false);
+  }
+}
+
+function switchTabByName(name) {
+  const btns = document.querySelectorAll('nav button');
+  const tabs = ['po','receipt','dashboard','product'];
+  const idx = tabs.indexOf(name);
+  if (idx >= 0) switchTab(name, btns[idx]);
+}
+
+function renderReceiptHeader(h) {
+  const fields = [
+    ['Receipt #', strField(h, ['ProductReceiptNumber','PackingSlipId','ReceiptNumber'])],
+    ['Date', fmtDate(strField(h, ['ProductReceiptDate','TransactionDate','PackingSlipDate']))],
+    ['PO #', strField(h, ['PurchaseOrderNumber'])],
+    ['Warehouse', strField(h, ['InventLocationId','WarehouseId'])],
+  ];
+  document.getElementById('receiptHeaderInfo').innerHTML =
+    fields.map(([k,v]) => `<div class="info-item"><span>${k}</span>${esc(v||'—')}</div>`).join('');
+}
+
+function renderReceiptLines(lines) {
+  const tbody = document.querySelector('#receiptTable tbody');
+  tbody.innerHTML = '';
+  if (!lines.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">No lines</td></tr>';
+    return;
+  }
+  lines.forEach((l, i) => {
+    const item = strField(l, ['ItemNumber']);
+    const desc = strField(l, ['LineDescription','ProductName','ItemName']);
+    const received = parseFloat(strField(l, ['ReceivedPurchaseQuantity','Quantity'])) || 0;
+    const unit = strField(l, ['PurchaseUnitSymbol','UnitSymbol','Unit']);
+    const batch = strField(l, ['InventBatchId','BatchId']);
+    const wh = strField(l, ['InventLocationId','WarehouseId']);
+    const bin = strField(l, ['WMSLocationId','BinId']);
+    const config = strField(l, ['ProductConfigurationId']);
+    const size = strField(l, ['ProductSizeId']);
+    const color = strField(l, ['ProductColorId']);
+    const serial = strField(l, ['InventSerialId','SerialId']);
+    const tr = document.createElement('tr');
+    tr.dataset.item = item;
+    tr.dataset.idx = i;
+    tr.dataset.received = received;
+    tr.dataset.unit = unit;
+    tr.dataset.wh = wh;
+    tr.dataset.bin = bin;
+    tr.dataset.config = config;
+    tr.dataset.size = size;
+    tr.dataset.color = color;
+    tr.dataset.serial = serial;
+    tr.innerHTML = `
+      <td>${esc(item)}</td>
+      <td><input type="text" class="desc" value="${esc(desc)}" style="min-width:160px"></td>
+      <td>${received}</td>
+      <td>${esc(unit)}</td>
+      <td><input type="text" class="batch" value="${esc(batch)}" style="width:120px"></td>
+      <td>${esc(wh)}${bin ? ' / '+esc(bin) : ''}</td>
+      <td><input type="number" class="cnt" value="${Math.ceil(received)}" min="0" max="999" oninput="updateTotal('receipt')"></td>
+      <td><button class="btn ghost icon" onclick="previewRow(this,'receipt')">👁</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  updateTotal('receipt');
+}
+
+// ── Dashboard ────────────────────────────────────────────────────────────────
+
+async function loadDashboard() {
+  const back = document.getElementById('daysBack').value || 7;
+  const fwd = document.getElementById('daysForward').value || 0;
+  try {
+    showLoading(true);
+    const receipts = await api(`/api/d365/recent-receipts?daysBack=${back}&daysForward=${fwd}`);
+    const tbody = document.querySelector('#dashTable tbody');
+    if (!receipts.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">No receipts in this date range</td></tr>';
+      return;
+    }
+    tbody.innerHTML = receipts.map(r => {
+      const num = strField(r, ['ProductReceiptNumber','PackingSlipId','ReceiptNumber']);
+      const po = strField(r, ['PurchaseOrderNumber']);
+      const wh = strField(r, ['InventLocationId','WarehouseId']);
+      const date = fmtDate(strField(r, ['ProductReceiptDate','TransactionDate','PackingSlipDate']));
+      return `<tr>
+        <td>${esc(date)}</td>
+        <td>${esc(num)}</td>
+        <td>${esc(po)}</td>
+        <td>${esc(wh)}</td>
+        <td><button class="btn small" onclick="loadReceipt('${esc(num)}')">Load & Print</button></td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    toast('error', e.message || 'Failed to load receipts');
+  } finally {
+    showLoading(false);
+  }
+}
+
+// ── Product Label ─────────────────────────────────────────────────────────────
+
+async function loadProduct() {
+  const item = document.getElementById('productInput').value.trim();
+  if (!item) return;
+  try {
+    showLoading(true);
+    const data = await api(`/api/d365/product/${encodeURIComponent(item)}`);
+    state.product = data;
+    document.getElementById('productDesc').value = data.desc || '';
+    document.getElementById('productBatch').value = '';
+    document.getElementById('productCount').value = 1;
+    document.getElementById('productInfo').innerHTML = [
+      ['Item', data.itemNumber],
+      ['Search Name', data.searchName],
+      ['Product Name', data.productName],
+    ].map(([k,v]) => `<div class="info-item"><span>${k}</span>${esc(v||'—')}</div>`).join('');
+    document.getElementById('productPanel').style.display = '';
+  } catch(e) {
+    toast('error', e.message || 'Item not found');
+  } finally {
+    showLoading(false);
+  }
+}
+
+async function printProductLabel() {
+  if (!state.product) return;
+  const label = buildProductLabel();
+  await doPrint([label]);
+}
+
+async function previewProductLabel() {
+  if (!state.product) return;
+  const label = buildProductLabel();
+  await doPreview(label);
+}
+
+function buildProductLabel() {
+  const p = state.product;
+  return {
+    itemNumber: p.itemNumber,
+    itemDesc: document.getElementById('productDesc').value,
+    poNumber: '',
+    searchName: p.searchName || '',
+    productName: p.productName || '',
+    unit: p.unit || '',
+    batchId: document.getElementById('productBatch').value,
+    binLocation: document.getElementById('binInput').value,
+    count: parseInt(document.getElementById('productCount').value) || 1,
+  };
+}
+
+// ── Product description enrichment ────────────────────────────────────────────
+
+async function enrichDescs(tabName) {
+  const tableId = tabName === 'po' ? 'poTable' : 'receiptTable';
+  const items = [...document.querySelectorAll(`#${tableId} tbody tr[data-item]`)]
+    .map(tr => tr.dataset.item).filter(Boolean);
+  if (!items.length) return;
+
+  try {
+    const data = await api(`/api/d365/product-descriptions?items=${items.map(encodeURIComponent).join(',')}`);
+    Object.entries(data).forEach(([item, p]) => {
+      state.productDescs[item] = p;
+      // Fill blank desc fields only
+      document.querySelectorAll(`#${tableId} tbody tr[data-item="${item}"]`).forEach(tr => {
+        const descInput = tr.querySelector('.desc');
+        if (descInput && !descInput.value) descInput.value = p.desc || '';
+        // Store for print use
+        tr.dataset.searchName = p.searchName || '';
+        tr.dataset.productName = p.productName || '';
+        tr.dataset.unit = tr.dataset.unit || p.unit || '';
+      });
+    });
+  } catch {}
+}
+
+// ── Bulk qty helpers ─────────────────────────────────────────────────────────
+
+function setAllQty(tab, mode) {
+  const tableId = tab === 'po' ? 'poTable' : 'receiptTable';
+  document.querySelectorAll(`#${tableId} tbody tr`).forEach(tr => {
+    const cnt = tr.querySelector('.cnt');
+    if (!cnt) return;
+    let val = 0;
+    if (mode === 'ordered') val = Math.ceil(parseFloat(tr.dataset.ordered) || 0);
+    else if (mode === 'remaining') val = Math.ceil(parseFloat(tr.dataset.remaining) || 0);
+    else if (mode === 'received') val = Math.ceil(parseFloat(tr.dataset.received) || 0);
+    cnt.value = val;
+  });
+  updateTotal(tab);
+}
+
+function clearAllQty(tab) {
+  const tableId = tab === 'po' ? 'poTable' : 'receiptTable';
+  document.querySelectorAll(`#${tableId} tbody tr .cnt`).forEach(i => { i.value = 0; });
+  updateTotal(tab);
+}
+
+function updateTotal(tab) {
+  const tableId = tab === 'po' ? 'poTable' : 'receiptTable';
+  const totalId = tab === 'po' ? 'poTotal' : 'receiptTotal';
+  let sum = 0;
+  document.querySelectorAll(`#${tableId} tbody tr .cnt`).forEach(i => { sum += parseInt(i.value) || 0; });
+  document.getElementById(totalId).textContent = sum + ' label' + (sum !== 1 ? 's' : '');
+}
+
+// ── Print ────────────────────────────────────────────────────────────────────
+
+async function printLabels(tab) {
+  const tableId = tab === 'po' ? 'poTable' : 'receiptTable';
+  const poNum = tab === 'po' ? document.getElementById('poInput').value.trim() : '';
+  const receiptNum = tab === 'receipt' ? document.getElementById('receiptInput').value.trim() : '';
+  const globalBin = document.getElementById('binInput').value.trim();
+
+  const labels = [];
+  document.querySelectorAll(`#${tableId} tbody tr[data-item]`).forEach(tr => {
+    const count = parseInt(tr.querySelector('.cnt')?.value) || 0;
+    if (count <= 0) return;
+    const item = tr.dataset.item;
+    const desc = tr.querySelector('.desc')?.value || '';
+    const batch = tr.querySelector('.batch')?.value || '';
+    labels.push({
+      itemNumber: item,
+      itemDesc: desc,
+      poNumber: poNum || strField(state.receipt?.header || {}, ['PurchaseOrderNumber']),
+      searchName: tr.dataset.searchName || (state.productDescs[item]?.searchName || ''),
+      productName: tr.dataset.productName || (state.productDescs[item]?.productName || ''),
+      unit: tr.dataset.unit || '',
+      configId: tr.dataset.config || '',
+      sizeId: tr.dataset.size || '',
+      colorId: tr.dataset.color || '',
+      batchId: batch,
+      serialId: tr.dataset.serial || '',
+      warehouseId: tr.dataset.wh || '',
+      binLocation: tr.dataset.bin || globalBin,
+      count,
+    });
+  });
+
+  if (!labels.length) { toast('warn', 'Set at least one label count > 0'); return; }
+  await doPrint(labels);
+}
+
+async function doPrint(labels) {
+  const printer = document.getElementById('printerSel').value;
+  if (!printer) { toast('error', 'Select a printer first'); return; }
+  try {
+    showLoading(true);
+    const result = await apiPost('/api/receiving-labels/print', { printer, labels });
+    toast('ok', `Sent ${result.count} label${result.count !== 1 ? 's' : ''} to printer`);
+  } catch(e) {
+    toast('error', e.message || 'Print failed');
+  } finally {
+    showLoading(false);
+  }
+}
+
+// ── Preview ───────────────────────────────────────────────────────────────────
+
+async function previewRow(btn, tab) {
+  const tr = btn.closest('tr');
+  const tableId = tab === 'po' ? 'poTable' : 'receiptTable';
+  const poNum = tab === 'po' ? document.getElementById('poInput').value.trim() : '';
+  const item = tr.dataset.item;
+  const label = {
+    itemNumber: item,
+    itemDesc: tr.querySelector('.desc')?.value || '',
+    poNumber: poNum || strField(state.receipt?.header || {}, ['PurchaseOrderNumber']),
+    searchName: tr.dataset.searchName || (state.productDescs[item]?.searchName || ''),
+    productName: tr.dataset.productName || (state.productDescs[item]?.productName || ''),
+    unit: tr.dataset.unit || '',
+    batchId: tr.querySelector('.batch')?.value || '',
+    binLocation: tr.dataset.bin || document.getElementById('binInput').value,
+  };
+  await doPreview(label);
+}
+
+async function doPreview(label) {
+  try {
+    showLoading(true);
+    const result = await apiPost('/api/receiving-labels/preview', { label });
+    document.getElementById('previewImg').src = result.image;
+    document.getElementById('previewModal').classList.add('show');
+  } catch(e) {
+    toast('error', 'Preview failed: ' + (e.message || ''));
+  } finally {
+    showLoading(false);
+  }
+}
+
+function closePreview(e) {
+  if (!e || e.target === e.currentTarget || e.target.classList.contains('close')) {
+    document.getElementById('previewModal').classList.remove('show');
+  }
+}
+
+// ── Printer test ──────────────────────────────────────────────────────────────
+
+async function testPrinter() {
+  const sel = document.getElementById('printerSel');
+  const name = sel.value;
+  if (!name) { toast('warn', 'Select a printer first'); return; }
+  // get IP from option text
+  const opt = sel.selectedOptions[0];
+  const match = opt.text.match(/\(([^)]+)\)/);
+  const ip = match ? match[1] : '';
+  if (!ip) { toast('warn', 'Could not determine printer IP'); return; }
+  try {
+    const r = await api(`/api/test-printer?ip=${encodeURIComponent(ip)}&port=9100`);
+    toast(r.reachable ? 'ok' : 'error', r.reachable ? `${name} reachable` : `${name} not reachable`);
+  } catch(e) { toast('error', e.message || 'Test failed'); }
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+
+async function api(url) {
+  const r = await fetch(url);
+  const json = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(json.error || `HTTP ${r.status}`);
+  return json;
+}
+
+async function apiPost(url, body) {
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const json = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(json.error || `HTTP ${r.status}`);
+  return json;
+}
+
+function strField(obj, keys) {
+  if (!obj) return '';
+  for (const k of keys) {
+    const v = obj[k];
+    if (v !== undefined && v !== null && v !== '') return String(v);
+  }
+  return '';
+}
+
+function fmtDate(s) {
+  if (!s) return '';
+  // OData /Date(ms)/ format
+  const m = s.match(/\/Date\((-?\d+)\)\//);
+  if (m) return new Date(parseInt(m[1])).toLocaleDateString();
+  // ISO
+  try { return new Date(s).toLocaleDateString(); } catch { return s; }
+}
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let _loadingTimer;
+function showLoading(on) {
+  clearTimeout(_loadingTimer);
+  if (on) {
+    _loadingTimer = setTimeout(() => {
+      // show subtle spinner in header if load takes > 300ms
+    }, 300);
+  }
+}
+
+let _toastTimer;
+function toast(type, msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show ' + (type === 'ok' ? 'ok' : type === 'error' ? 'err' : '');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+}
+</script>
+</body>
+</html>
