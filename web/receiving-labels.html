@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Receiving Labels — Label Hub</title>
+<title>Label Hub</title>
 <style>
   :root {
     --bg:#0f1419; --panel:#1a212b; --panel2:#222c38; --line:#2c3744;
@@ -24,6 +24,8 @@
   nav button { background:none; border:none; color:var(--muted); padding:12px 18px;
                cursor:pointer; font-size:14px; border-bottom:2px solid transparent; white-space:nowrap; }
   nav button.active { color:var(--text); border-bottom-color:var(--accent); }
+  nav button .badge { background:var(--accent); color:#fff; border-radius:10px;
+                      padding:0 7px; font-size:11px; margin-left:6px; }
   main { padding:20px; max-width:1300px; margin:0 auto; }
   .tab { display:none; }
   .tab.active { display:block; }
@@ -32,7 +34,6 @@
   .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
   .grow { flex:1; min-width:120px; }
   h2 { font-size:15px; margin:0 0 12px; }
-  h3 { font-size:13px; margin:8px 0 4px; color:var(--muted); font-weight:500; }
   label.fld { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
   input, select { background:var(--panel2); border:1px solid var(--line); color:var(--text);
                   border-radius:6px; padding:8px 10px; font-size:14px; width:100%; }
@@ -60,19 +61,26 @@
   .info-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:8px 16px; }
   .info-item { font-size:12px; }
   .info-item span { color:var(--muted); display:block; }
+  .tag { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; }
+  .tag.queued  { background:#1e3a5f; color:#93c5fd; }
+  .tag.printed { background:#14432a; color:#86efac; }
+  .tag.failed  { background:#451a1a; color:#fca5a5; }
+  .tag.dismissed { background:#3a3a3a; color:#bbb; }
   .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
            background:var(--panel); border:1px solid var(--line); border-radius:8px;
            padding:12px 20px; font-size:14px; z-index:99; display:none;
            box-shadow:0 4px 24px #0006; max-width:380px; text-align:center; }
   .toast.show { display:block; }
-  .toast.ok { border-color:var(--good); color:var(--good); }
-  .toast.err { border-color:var(--bad); color:var(--bad); }
-  .spinner { display:inline-block; width:14px; height:14px; border:2px solid var(--line);
-             border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite;
-             vertical-align:middle; margin-right:6px; }
-  @keyframes spin { to { transform:rotate(360deg); } }
+  .toast.ok  { border-color:var(--good); color:var(--good); }
+  .toast.err { border-color:var(--bad);  color:var(--bad);  }
+  .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.6); display:none;
+              align-items:center; justify-content:center; z-index:50; }
+  .modal-bg.show { display:flex; }
+  .modal { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+           padding:20px; max-width:90vw; min-width:280px; }
+  .modal img { max-width:520px; background:#fff; border-radius:4px; display:block; margin:12px 0; }
   .preview-modal { position:fixed; inset:0; background:#0009; display:none;
-                   align-items:center; justify-content:center; z-index:50; }
+                   align-items:center; justify-content:center; z-index:60; }
   .preview-modal.show { display:flex; }
   .preview-modal img { max-width:90vw; max-height:80vh; border-radius:8px; box-shadow:0 4px 40px #000; }
   .preview-modal .close { position:absolute; top:20px; right:24px; color:#fff;
@@ -91,8 +99,8 @@
 <body>
 
 <header>
-  <h1>Receiving Labels</h1>
-  <a href="/">← Label Hub</a>
+  <h1>Label Hub</h1>
+  <a href="/">⚙ Site Settings</a>
   <div class="header-right">
     <label class="fld" style="flex-direction:row;align-items:center;gap:8px;margin:0">
       <span>Printer</span>
@@ -111,16 +119,48 @@
 </header>
 
 <nav>
-  <button class="active" onclick="switchTab('po',this)">By PO</button>
-  <button onclick="switchTab('receipt',this)">By Receipt</button>
-  <button onclick="switchTab('dashboard',this)">Dashboard</button>
-  <button onclick="switchTab('product',this)">Product Label</button>
+  <button data-tab="queue" class="active">Queue <span class="badge" id="queueBadge" style="display:none">0</span></button>
+  <button data-tab="reprint">Reprint Console</button>
+  <button data-tab="po">By PO</button>
+  <button data-tab="receipt">By Receipt</button>
+  <button data-tab="dashboard">Dashboard</button>
+  <button data-tab="product">Product Label</button>
 </nav>
 
 <main>
 
+<!-- ── Receiving Queue ────────────────────────────────────────────────────── -->
+<div id="tab-queue" class="tab active">
+  <div class="panel" style="overflow-x:auto">
+    <div class="row" style="margin-bottom:12px">
+      <h2 style="margin:0">Queued Labels</h2>
+      <button class="btn ghost small" style="margin-left:auto" onclick="loadQueue()">Refresh</button>
+    </div>
+    <table>
+      <thead><tr><th>Received</th><th>Printer</th><th>Source</th><th>Labels</th><th>Status</th><th></th></tr></thead>
+      <tbody id="queueBody"></tbody>
+    </table>
+    <div class="empty" id="queueEmpty">No labels waiting.</div>
+  </div>
+</div>
+
+<!-- ── Reprint Console ───────────────────────────────────────────────────── -->
+<div id="tab-reprint" class="tab">
+  <div class="panel">
+    <div class="row" style="margin-bottom:12px">
+      <input class="grow" id="histFilter" placeholder="Filter by printer or status…" oninput="renderHistory()" style="width:auto">
+      <button class="btn ghost small" onclick="loadHistory()">Refresh</button>
+    </div>
+    <table>
+      <thead><tr><th>Time</th><th>Printer</th><th>Source</th><th>Labels</th><th>Status</th><th></th></tr></thead>
+      <tbody id="histBody"></tbody>
+    </table>
+    <div class="empty" id="histEmpty">No history yet.</div>
+  </div>
+</div>
+
 <!-- ── By PO ─────────────────────────────────────────────────────────────── -->
-<div id="tab-po" class="tab active">
+<div id="tab-po" class="tab">
   <div class="panel">
     <h2>Purchase Order</h2>
     <div class="row">
@@ -137,9 +177,7 @@
     <div id="poHeaderInfo" class="info-grid"></div>
     <div class="row" style="margin-top:12px">
       <label class="fld grow"><span>Apply Received Qty from Receipt</span>
-        <select id="poReceiptSel">
-          <option value="">— none —</option>
-        </select>
+        <select id="poReceiptSel"><option value="">— none —</option></select>
       </label>
       <button class="btn ghost small" onclick="applyReceiptQty()" style="margin-top:20px">Apply Quantities</button>
     </div>
@@ -264,7 +302,34 @@
 
 </main>
 
-<!-- Preview modal -->
+<!-- Reprint modal -->
+<div class="modal-bg" id="reprintModal" onclick="if(event.target===this)closeReprintModal()">
+  <div class="modal">
+    <h2 id="reprintTitle">Reprint</h2>
+    <p style="color:var(--muted);font-size:13px" id="reprintHint"></p>
+    <label class="fld" style="margin-bottom:14px">Printer
+      <select id="reprintPrinterSel"></select>
+    </label>
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="doReprint()">Print</button>
+      <button class="btn ghost" onclick="closeReprintModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Job preview modal -->
+<div class="modal-bg" id="jobPreviewModal" onclick="if(event.target===this)this.classList.remove('show')">
+  <div class="modal">
+    <h2 id="jobPreviewTitle">Preview</h2>
+    <img id="jobPreviewImg" src="" alt="label preview" style="display:none">
+    <p id="jobPreviewMsg" style="color:var(--muted)"></p>
+    <div style="text-align:right;margin-top:12px">
+      <button class="btn ghost small" onclick="document.getElementById('jobPreviewModal').classList.remove('show')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Receiving-label preview modal -->
 <div id="previewModal" class="preview-modal" onclick="closePreview(event)">
   <button class="close" onclick="closePreview()">×</button>
   <img id="previewImg" src="" alt="label preview">
@@ -276,11 +341,16 @@
 // ── State ────────────────────────────────────────────────────────────────────
 
 const state = {
-  po: null,           // { header, lines }
-  receipt: null,      // { header, lines }
-  productDescs: {},   // itemNumber → { desc, searchName, productName, unit }
-  product: null,      // single product
+  po: null,
+  receipt: null,
+  productDescs: {},
+  product: null,
+  printers: [],
 };
+
+let queueJobs = [];
+let historyJobs = [];
+let _reprintJobId = null;
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 
@@ -288,26 +358,38 @@ document.addEventListener('DOMContentLoaded', () => {
   loadPrinters();
   restoreSettings();
   loadAutoprint();
+  loadQueue();
+  connectSSE();
   document.getElementById('binInput').addEventListener('input', saveBin);
   document.getElementById('printerSel').addEventListener('change', savePrinter);
   document.getElementById('autoPrintToggle').addEventListener('change', saveAutoprint);
 });
 
+// ── Tab switching ─────────────────────────────────────────────────────────────
+
+document.querySelectorAll('nav button[data-tab]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    if (btn.dataset.tab === 'reprint') loadHistory();
+  });
+});
+
+function switchTab(name) {
+  const btn = document.querySelector(`nav button[data-tab="${name}"]`);
+  if (btn) btn.click();
+}
+
+// ── Settings / autoprint ──────────────────────────────────────────────────────
+
 function restoreSettings() {
-  const bin = localStorage.getItem('rl_bin') || '';
-  const printer = localStorage.getItem('rl_printer') || '';
-  document.getElementById('binInput').value = bin;
-  // printer restored after loadPrinters()
-  window._savedPrinter = printer;
+  document.getElementById('binInput').value = localStorage.getItem('rl_bin') || '';
+  window._savedPrinter = localStorage.getItem('rl_printer') || '';
 }
-
-function saveBin() {
-  localStorage.setItem('rl_bin', document.getElementById('binInput').value);
-}
-
-function savePrinter() {
-  localStorage.setItem('rl_printer', document.getElementById('printerSel').value);
-}
+function saveBin() { localStorage.setItem('rl_bin', document.getElementById('binInput').value); }
+function savePrinter() { localStorage.setItem('rl_printer', document.getElementById('printerSel').value); }
 
 async function loadAutoprint() {
   try {
@@ -319,8 +401,7 @@ async function loadAutoprint() {
 async function saveAutoprint(e) {
   try {
     await fetch('/api/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ auto_print: e.target.checked }),
     });
     toast('ok', 'Auto-print ' + (e.target.checked ? 'on' : 'off'));
@@ -330,24 +411,179 @@ async function saveAutoprint(e) {
   }
 }
 
+// ── Printers ─────────────────────────────────────────────────────────────────
+
 async function loadPrinters() {
-  const printers = await api('/api/printers');
+  state.printers = await api('/api/printers').catch(() => []);
   const sel = document.getElementById('printerSel');
-  sel.innerHTML = printers.length
-    ? printers.map(p => `<option value="${esc(p.name)}">${esc(p.name)} (${esc(p.ip)})</option>`).join('')
+  sel.innerHTML = state.printers.length
+    ? state.printers.map(p => `<option value="${esc(p.name)}">${esc(p.name)} (${esc(p.ip)})</option>`).join('')
     : '<option value="">No printers configured</option>';
-  if (window._savedPrinter) {
-    sel.value = window._savedPrinter;
+  if (window._savedPrinter) sel.value = window._savedPrinter;
+}
+
+async function testPrinter() {
+  const sel = document.getElementById('printerSel');
+  const name = sel.value;
+  if (!name) { toast('error', 'Select a printer first'); return; }
+  const opt = sel.selectedOptions[0];
+  const ip = (opt.text.match(/\(([^)]+)\)/) || [])[1] || '';
+  if (!ip) { toast('error', 'Could not determine printer IP'); return; }
+  try {
+    const r = await api(`/api/test-printer?ip=${encodeURIComponent(ip)}&port=9100`);
+    toast(r.reachable ? 'ok' : 'error', r.reachable ? `${name} reachable` : `${name} not reachable`);
+  } catch(e) { toast('error', e.message || 'Test failed'); }
+}
+
+// ── Receiving Queue ──────────────────────────────────────────────────────────
+
+async function loadQueue() {
+  try { queueJobs = await api('/api/jobs'); renderQueue(); }
+  catch(e) { toast('error', 'Load queue failed: ' + e.message); }
+}
+
+function renderQueue() {
+  const body = document.getElementById('queueBody');
+  body.innerHTML = '';
+  const active = queueJobs.filter(j => j.status === 'queued' || j.status === 'failed');
+  document.getElementById('queueEmpty').style.display = active.length ? 'none' : 'block';
+  const badge = document.getElementById('queueBadge');
+  if (active.length) { badge.style.display = 'inline-block'; badge.textContent = active.length; }
+  else badge.style.display = 'none';
+  for (const j of active) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${fmtTime(j.received_at)}</td>
+      <td style="font-family:monospace">${esc(j.printer)}</td>
+      <td>${esc(j.source)}</td>
+      <td>${j.label_count}</td>
+      <td><span class="tag ${esc(j.status)}">${esc(j.status)}</span>${j.error ? ` <span style="color:var(--muted)" title="${esc(j.error)}">⚠</span>` : ''}</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn small" onclick="printQueueJob('${j.id}')">Print</button>
+        <button class="btn ghost small" onclick="previewJob('${j.id}','queue')">Preview</button>
+        <button class="btn ghost small" onclick="dismissJob('${j.id}')">Dismiss</button>
+      </td>`;
+    body.appendChild(tr);
   }
 }
 
-// ── Tab switching ─────────────────────────────────────────────────────────────
+async function printQueueJob(id) {
+  try {
+    await apiPost(`/api/jobs/${id}/print`, {});
+    toast('ok', 'Sent to printer');
+  } catch(e) { toast('error', 'Print failed: ' + e.message); }
+}
 
-function switchTab(name, btn) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
-  btn.classList.add('active');
+async function dismissJob(id) {
+  if (!confirm('Dismiss without printing?')) return;
+  try { await apiPost(`/api/jobs/${id}/dismiss`, {}); }
+  catch(e) { toast('error', 'Dismiss failed: ' + e.message); }
+}
+
+// ── Reprint Console ──────────────────────────────────────────────────────────
+
+async function loadHistory() {
+  try { historyJobs = await api('/api/jobs/history'); renderHistory(); }
+  catch(e) { toast('error', 'Load history failed: ' + e.message); }
+}
+
+function renderHistory() {
+  const f = (document.getElementById('histFilter').value || '').toLowerCase();
+  const rows = historyJobs.filter(j =>
+    !f || (j.printer + ' ' + j.status + ' ' + j.source).toLowerCase().includes(f));
+  const body = document.getElementById('histBody');
+  body.innerHTML = '';
+  document.getElementById('histEmpty').style.display = rows.length ? 'none' : 'block';
+  for (const j of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${fmtTime(j.printed_at || j.received_at)}</td>
+      <td style="font-family:monospace">${esc(j.printer)}</td>
+      <td>${esc(j.source)}</td>
+      <td>${j.label_count}</td>
+      <td><span class="tag ${esc(j.status)}">${esc(j.status)}</span>${j.error ? ` <span style="color:var(--muted)" title="${esc(j.error)}">⚠</span>` : ''}</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn small" onclick="openReprintModal('${j.id}')">Reprint</button>
+        <button class="btn ghost small" onclick="previewJob('${j.id}','history')">Preview</button>
+      </td>`;
+    body.appendChild(tr);
+  }
+}
+
+function openReprintModal(id) {
+  const job = historyJobs.find(j => j.id === id);
+  if (!job) return;
+  _reprintJobId = id;
+  document.getElementById('reprintTitle').textContent = 'Reprint · ' + job.printer;
+  document.getElementById('reprintHint').textContent = `${job.label_count} label${job.label_count !== 1 ? 's' : ''} · ${fmtTime(job.printed_at || job.received_at)}`;
+  const opts = state.printers.map(p =>
+    `<option value="${esc(p.name)}" ${p.name === job.printer ? 'selected' : ''}>${esc(p.name)}</option>`
+  ).join('') || `<option value="${esc(job.printer)}">${esc(job.printer)}</option>`;
+  document.getElementById('reprintPrinterSel').innerHTML = opts;
+  document.getElementById('reprintModal').classList.add('show');
+}
+
+function closeReprintModal() {
+  document.getElementById('reprintModal').classList.remove('show');
+  _reprintJobId = null;
+}
+
+async function doReprint() {
+  if (!_reprintJobId) return;
+  const printer = document.getElementById('reprintPrinterSel').value;
+  try {
+    await apiPost(`/api/jobs/${_reprintJobId}/print?printer=${encodeURIComponent(printer)}`, {});
+    toast('ok', 'Reprinted to ' + printer);
+    closeReprintModal();
+    loadHistory();
+  } catch(e) { toast('error', 'Reprint failed: ' + e.message); }
+}
+
+// ── Job preview (queue / history ZPL → Labelary) ─────────────────────────────
+
+async function previewJob(id, where) {
+  const list = where === 'history' ? historyJobs : queueJobs;
+  const job = list.find(j => j.id === id);
+  if (!job) return;
+  const modal = document.getElementById('jobPreviewModal');
+  const img = document.getElementById('jobPreviewImg');
+  const msg = document.getElementById('jobPreviewMsg');
+  document.getElementById('jobPreviewTitle').textContent = 'Preview · ' + job.printer;
+  img.style.display = 'none'; img.src = '';
+  msg.textContent = 'Rendering…';
+  modal.classList.add('show');
+  try {
+    const r = await apiPost('/api/preview-label', { zpl: job.zpl });
+    img.src = r.image; img.style.display = 'block'; msg.textContent = '';
+  } catch(e) {
+    msg.textContent = 'Could not render: ' + e.message;
+  }
+}
+
+// ── SSE (live queue updates) ─────────────────────────────────────────────────
+
+function connectSSE() {
+  const es = new EventSource('/api/queue-events');
+  es.onmessage = (ev) => {
+    let msg; try { msg = JSON.parse(ev.data); } catch { return; }
+    switch (msg.type) {
+      case 'backlog':
+        queueJobs = msg.jobs || []; renderQueue(); break;
+      case 'new_job':
+        queueJobs.unshift(msg.job); renderQueue();
+        toast('ok', 'New label for ' + msg.job.printer); break;
+      case 'job_update':
+        queueJobs = queueJobs.filter(j => j.id !== msg.job.id); renderQueue();
+        if (document.getElementById('tab-reprint').classList.contains('active')) loadHistory();
+        break;
+      case 'job_dismissed':
+        queueJobs = queueJobs.filter(j => j.id !== msg.id); renderQueue(); break;
+      case 'job_error':
+        toast('error', 'Print error: ' + msg.error); loadQueue(); break;
+      case 'settings':
+        if (msg.settings) document.getElementById('autoPrintToggle').checked = !!msg.settings.auto_print; break;
+    }
+  };
 }
 
 // ── By PO ────────────────────────────────────────────────────────────────────
@@ -367,9 +603,7 @@ async function loadPo() {
     document.getElementById('poLines').style.display = '';
   } catch(e) {
     toast('error', e.message || 'Failed to load PO');
-  } finally {
-    showLoading(false);
-  }
+  } finally { showLoading(false); }
 }
 
 function renderPoHeader(h) {
@@ -387,8 +621,7 @@ function renderPoHeader(h) {
 async function loadPoReceipts(po) {
   try {
     const receipts = await api(`/api/d365/receipts-for-po/${encodeURIComponent(po)}`);
-    const sel = document.getElementById('poReceiptSel');
-    sel.innerHTML = '<option value="">— none —</option>' +
+    document.getElementById('poReceiptSel').innerHTML = '<option value="">— none —</option>' +
       receipts.map(r => {
         const n = strField(r, ['ProductReceiptNumber','PackingSlipId','ReceiptNumber']);
         const d = fmtDate(strField(r, ['ProductReceiptDate','TransactionDate','PackingSlipDate']));
@@ -398,68 +631,48 @@ async function loadPoReceipts(po) {
 }
 
 async function applyReceiptQty() {
-  const sel = document.getElementById('poReceiptSel');
-  const receiptNum = sel.value;
+  const receiptNum = document.getElementById('poReceiptSel').value;
   if (!receiptNum || !state.po) return;
   try {
     const data = await api(`/api/d365/receipt/${encodeURIComponent(receiptNum)}`);
-    const lines = data.lines || [];
-    // map by item number
     const byItem = {};
-    lines.forEach(l => {
+    (data.lines || []).forEach(l => {
       const item = strField(l, ['ItemNumber']);
-      if (item) byItem[item] = parseFloat(strField(l, ['ReceivedPurchaseQuantity','ReceivedCatchWeightQuantity','Quantity'])) || 0;
+      if (item) byItem[item] = parseFloat(strField(l, ['ReceivedPurchaseQuantity','Quantity'])) || 0;
     });
     document.querySelectorAll('#poTable tbody tr').forEach(tr => {
-      const item = tr.dataset.item;
-      if (item && byItem[item] !== undefined) {
-        const countInput = tr.querySelector('.cnt');
-        countInput.value = Math.ceil(byItem[item]);
+      if (tr.dataset.item && byItem[tr.dataset.item] !== undefined) {
+        tr.querySelector('.cnt').value = Math.ceil(byItem[tr.dataset.item]);
         updateTotal('po');
       }
     });
-  } catch(e) {
-    toast('error', 'Could not load receipt: ' + (e.message || ''));
-  }
+  } catch(e) { toast('error', 'Could not load receipt: ' + (e.message || '')); }
 }
 
 function renderPoLines(lines) {
   const tbody = document.querySelector('#poTable tbody');
   tbody.innerHTML = '';
-  if (!lines.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="empty">No lines</td></tr>';
-    return;
-  }
+  if (!lines.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty">No lines</td></tr>'; return; }
   lines.forEach((l, i) => {
     const item = strField(l, ['ItemNumber']);
-    const desc = strField(l, ['LineDescription','ProcurementProductName','ItemName','Name']);
-    const ordered = parseFloat(strField(l, ['OrderedPurchaseQuantity','PurchaseQuantity'])) || 0;
-    const remaining = parseFloat(strField(l, ['RemainingPurchaseQuantity','OpenPurchaseQuantity'])) || 0;
-    const unit = strField(l, ['PurchaseUnitSymbol','UnitSymbol','Unit']);
-    const wh = strField(l, ['ReceivingWarehouseId','InventLocationId']);
-    const config = strField(l, ['ProductConfigurationId']);
-    const size = strField(l, ['ProductSizeId']);
-    const color = strField(l, ['ProductColorId']);
     const tr = document.createElement('tr');
     tr.dataset.item = item;
-    tr.dataset.idx = i;
-    tr.dataset.ordered = ordered;
-    tr.dataset.remaining = remaining;
-    tr.dataset.unit = unit;
-    tr.dataset.wh = wh;
-    tr.dataset.config = config;
-    tr.dataset.size = size;
-    tr.dataset.color = color;
+    tr.dataset.ordered = parseFloat(strField(l, ['OrderedPurchaseQuantity','PurchaseQuantity'])) || 0;
+    tr.dataset.remaining = parseFloat(strField(l, ['RemainingPurchaseQuantity','OpenPurchaseQuantity'])) || 0;
+    tr.dataset.unit = strField(l, ['PurchaseUnitSymbol','UnitSymbol','Unit']);
+    tr.dataset.wh = strField(l, ['ReceivingWarehouseId','InventLocationId']);
+    tr.dataset.config = strField(l, ['ProductConfigurationId']);
+    tr.dataset.size = strField(l, ['ProductSizeId']);
+    tr.dataset.color = strField(l, ['ProductColorId']);
+    const desc = strField(l, ['LineDescription','ProcurementProductName','ItemName','Name']);
     tr.innerHTML = `
       <td>${esc(item)}</td>
       <td><input type="text" class="desc" value="${esc(desc)}" style="min-width:160px"></td>
-      <td>${ordered}</td>
-      <td>${remaining}</td>
-      <td>${esc(unit)}</td>
+      <td>${tr.dataset.ordered}</td><td>${tr.dataset.remaining}</td>
+      <td>${esc(tr.dataset.unit)}</td>
       <td><input type="text" class="batch" placeholder="batch #" style="width:120px"></td>
       <td><input type="number" class="cnt" value="0" min="0" max="999" oninput="updateTotal('po')"></td>
-      <td><button class="btn ghost icon" onclick="previewRow(this,'po')">👁</button></td>
-    `;
+      <td><button class="btn ghost icon" onclick="previewRow(this,'po')">👁</button></td>`;
     tbody.appendChild(tr);
   });
   updateTotal('po');
@@ -471,7 +684,7 @@ async function loadReceipt(receiptNum) {
   const input = receiptNum || document.getElementById('receiptInput').value.trim();
   if (!input) return;
   document.getElementById('receiptInput').value = input;
-  switchTabByName('receipt');
+  switchTab('receipt');
   try {
     showLoading(true);
     const data = await api(`/api/d365/receipt/${encodeURIComponent(input)}`);
@@ -483,16 +696,7 @@ async function loadReceipt(receiptNum) {
     document.getElementById('receiptLines').style.display = '';
   } catch(e) {
     toast('error', e.message || 'Failed to load receipt');
-  } finally {
-    showLoading(false);
-  }
-}
-
-function switchTabByName(name) {
-  const btns = document.querySelectorAll('nav button');
-  const tabs = ['po','receipt','dashboard','product'];
-  const idx = tabs.indexOf(name);
-  if (idx >= 0) switchTab(name, btns[idx]);
+  } finally { showLoading(false); }
 }
 
 function renderReceiptHeader(h) {
@@ -509,43 +713,31 @@ function renderReceiptHeader(h) {
 function renderReceiptLines(lines) {
   const tbody = document.querySelector('#receiptTable tbody');
   tbody.innerHTML = '';
-  if (!lines.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="empty">No lines</td></tr>';
-    return;
-  }
-  lines.forEach((l, i) => {
+  if (!lines.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty">No lines</td></tr>'; return; }
+  lines.forEach((l) => {
     const item = strField(l, ['ItemNumber']);
-    const desc = strField(l, ['LineDescription','ProductName','ItemName']);
     const received = parseFloat(strField(l, ['ReceivedPurchaseQuantity','Quantity'])) || 0;
-    const unit = strField(l, ['PurchaseUnitSymbol','UnitSymbol','Unit']);
-    const batch = strField(l, ['InventBatchId','BatchId']);
-    const wh = strField(l, ['InventLocationId','WarehouseId']);
-    const bin = strField(l, ['WMSLocationId','BinId']);
-    const config = strField(l, ['ProductConfigurationId']);
-    const size = strField(l, ['ProductSizeId']);
-    const color = strField(l, ['ProductColorId']);
-    const serial = strField(l, ['InventSerialId','SerialId']);
     const tr = document.createElement('tr');
     tr.dataset.item = item;
-    tr.dataset.idx = i;
     tr.dataset.received = received;
-    tr.dataset.unit = unit;
-    tr.dataset.wh = wh;
-    tr.dataset.bin = bin;
-    tr.dataset.config = config;
-    tr.dataset.size = size;
-    tr.dataset.color = color;
-    tr.dataset.serial = serial;
+    tr.dataset.unit = strField(l, ['PurchaseUnitSymbol','UnitSymbol','Unit']);
+    tr.dataset.wh = strField(l, ['InventLocationId','WarehouseId']);
+    tr.dataset.bin = strField(l, ['WMSLocationId','BinId']);
+    tr.dataset.config = strField(l, ['ProductConfigurationId']);
+    tr.dataset.size = strField(l, ['ProductSizeId']);
+    tr.dataset.color = strField(l, ['ProductColorId']);
+    tr.dataset.serial = strField(l, ['InventSerialId','SerialId']);
+    const desc = strField(l, ['LineDescription','ProductName','ItemName']);
+    const batch = strField(l, ['InventBatchId','BatchId']);
+    const wh = tr.dataset.wh; const bin = tr.dataset.bin;
     tr.innerHTML = `
       <td>${esc(item)}</td>
       <td><input type="text" class="desc" value="${esc(desc)}" style="min-width:160px"></td>
-      <td>${received}</td>
-      <td>${esc(unit)}</td>
+      <td>${received}</td><td>${esc(tr.dataset.unit)}</td>
       <td><input type="text" class="batch" value="${esc(batch)}" style="width:120px"></td>
       <td>${esc(wh)}${bin ? ' / '+esc(bin) : ''}</td>
       <td><input type="number" class="cnt" value="${Math.ceil(received)}" min="0" max="999" oninput="updateTotal('receipt')"></td>
-      <td><button class="btn ghost icon" onclick="previewRow(this,'receipt')">👁</button></td>
-    `;
+      <td><button class="btn ghost icon" onclick="previewRow(this,'receipt')">👁</button></td>`;
     tbody.appendChild(tr);
   });
   updateTotal('receipt');
@@ -555,7 +747,7 @@ function renderReceiptLines(lines) {
 
 async function loadDashboard() {
   const back = document.getElementById('daysBack').value || 7;
-  const fwd = document.getElementById('daysForward').value || 0;
+  const fwd  = document.getElementById('daysForward').value || 0;
   try {
     showLoading(true);
     const receipts = await api(`/api/d365/recent-receipts?daysBack=${back}&daysForward=${fwd}`);
@@ -565,23 +757,18 @@ async function loadDashboard() {
       return;
     }
     tbody.innerHTML = receipts.map(r => {
-      const num = strField(r, ['ProductReceiptNumber','PackingSlipId','ReceiptNumber']);
-      const po = strField(r, ['PurchaseOrderNumber']);
-      const wh = strField(r, ['InventLocationId','WarehouseId']);
+      const num  = strField(r, ['ProductReceiptNumber','PackingSlipId','ReceiptNumber']);
+      const po   = strField(r, ['PurchaseOrderNumber']);
+      const wh   = strField(r, ['InventLocationId','WarehouseId']);
       const date = fmtDate(strField(r, ['ProductReceiptDate','TransactionDate','PackingSlipDate']));
       return `<tr>
-        <td>${esc(date)}</td>
-        <td>${esc(num)}</td>
-        <td>${esc(po)}</td>
-        <td>${esc(wh)}</td>
+        <td>${esc(date)}</td><td>${esc(num)}</td><td>${esc(po)}</td><td>${esc(wh)}</td>
         <td><button class="btn small" onclick="loadReceipt('${esc(num)}')">Load & Print</button></td>
       </tr>`;
     }).join('');
   } catch(e) {
     toast('error', e.message || 'Failed to load receipts');
-  } finally {
-    showLoading(false);
-  }
+  } finally { showLoading(false); }
 }
 
 // ── Product Label ─────────────────────────────────────────────────────────────
@@ -597,40 +784,30 @@ async function loadProduct() {
     document.getElementById('productBatch').value = '';
     document.getElementById('productCount').value = 1;
     document.getElementById('productInfo').innerHTML = [
-      ['Item', data.itemNumber],
-      ['Search Name', data.searchName],
-      ['Product Name', data.productName],
+      ['Item', data.itemNumber], ['Search Name', data.searchName], ['Product Name', data.productName],
     ].map(([k,v]) => `<div class="info-item"><span>${k}</span>${esc(v||'—')}</div>`).join('');
     document.getElementById('productPanel').style.display = '';
   } catch(e) {
     toast('error', e.message || 'Item not found');
-  } finally {
-    showLoading(false);
-  }
+  } finally { showLoading(false); }
 }
 
 async function printProductLabel() {
   if (!state.product) return;
-  const label = buildProductLabel();
-  await doPrint([label]);
+  await doPrint([buildProductLabel()]);
 }
 
 async function previewProductLabel() {
   if (!state.product) return;
-  const label = buildProductLabel();
-  await doPreview(label);
+  await doPreview(buildProductLabel());
 }
 
 function buildProductLabel() {
   const p = state.product;
   return {
-    itemNumber: p.itemNumber,
-    itemDesc: document.getElementById('productDesc').value,
-    poNumber: '',
-    searchName: p.searchName || '',
-    productName: p.productName || '',
-    unit: p.unit || '',
-    batchId: document.getElementById('productBatch').value,
+    itemNumber: p.itemNumber, itemDesc: document.getElementById('productDesc').value,
+    poNumber: '', searchName: p.searchName || '', productName: p.productName || '',
+    unit: p.unit || '', batchId: document.getElementById('productBatch').value,
     binLocation: document.getElementById('binInput').value,
     count: parseInt(document.getElementById('productCount').value) || 1,
   };
@@ -643,16 +820,13 @@ async function enrichDescs(tabName) {
   const items = [...document.querySelectorAll(`#${tableId} tbody tr[data-item]`)]
     .map(tr => tr.dataset.item).filter(Boolean);
   if (!items.length) return;
-
   try {
     const data = await api(`/api/d365/product-descriptions?items=${items.map(encodeURIComponent).join(',')}`);
     Object.entries(data).forEach(([item, p]) => {
       state.productDescs[item] = p;
-      // Fill blank desc fields only
       document.querySelectorAll(`#${tableId} tbody tr[data-item="${item}"]`).forEach(tr => {
-        const descInput = tr.querySelector('.desc');
-        if (descInput && !descInput.value) descInput.value = p.desc || '';
-        // Store for print use
+        const d = tr.querySelector('.desc');
+        if (d && !d.value) d.value = p.desc || '';
         tr.dataset.searchName = p.searchName || '';
         tr.dataset.productName = p.productName || '';
         tr.dataset.unit = tr.dataset.unit || p.unit || '';
@@ -666,20 +840,15 @@ async function enrichDescs(tabName) {
 function setAllQty(tab, mode) {
   const tableId = tab === 'po' ? 'poTable' : 'receiptTable';
   document.querySelectorAll(`#${tableId} tbody tr`).forEach(tr => {
-    const cnt = tr.querySelector('.cnt');
-    if (!cnt) return;
-    let val = 0;
-    if (mode === 'ordered') val = Math.ceil(parseFloat(tr.dataset.ordered) || 0);
-    else if (mode === 'remaining') val = Math.ceil(parseFloat(tr.dataset.remaining) || 0);
-    else if (mode === 'received') val = Math.ceil(parseFloat(tr.dataset.received) || 0);
-    cnt.value = val;
+    const cnt = tr.querySelector('.cnt'); if (!cnt) return;
+    cnt.value = Math.ceil(parseFloat(tr.dataset[mode] || tr.dataset.received || 0));
   });
   updateTotal(tab);
 }
 
 function clearAllQty(tab) {
-  const tableId = tab === 'po' ? 'poTable' : 'receiptTable';
-  document.querySelectorAll(`#${tableId} tbody tr .cnt`).forEach(i => { i.value = 0; });
+  document.querySelectorAll(`#${tab === 'po' ? 'poTable' : 'receiptTable'} tbody tr .cnt`)
+    .forEach(i => { i.value = 0; });
   updateTotal(tab);
 }
 
@@ -691,40 +860,31 @@ function updateTotal(tab) {
   document.getElementById(totalId).textContent = sum + ' label' + (sum !== 1 ? 's' : '');
 }
 
-// ── Print ────────────────────────────────────────────────────────────────────
+// ── Print (receiving labels) ─────────────────────────────────────────────────
 
 async function printLabels(tab) {
   const tableId = tab === 'po' ? 'poTable' : 'receiptTable';
   const poNum = tab === 'po' ? document.getElementById('poInput').value.trim() : '';
-  const receiptNum = tab === 'receipt' ? document.getElementById('receiptInput').value.trim() : '';
   const globalBin = document.getElementById('binInput').value.trim();
-
   const labels = [];
   document.querySelectorAll(`#${tableId} tbody tr[data-item]`).forEach(tr => {
     const count = parseInt(tr.querySelector('.cnt')?.value) || 0;
     if (count <= 0) return;
     const item = tr.dataset.item;
-    const desc = tr.querySelector('.desc')?.value || '';
-    const batch = tr.querySelector('.batch')?.value || '';
     labels.push({
       itemNumber: item,
-      itemDesc: desc,
+      itemDesc: tr.querySelector('.desc')?.value || '',
       poNumber: poNum || strField(state.receipt?.header || {}, ['PurchaseOrderNumber']),
       searchName: tr.dataset.searchName || (state.productDescs[item]?.searchName || ''),
       productName: tr.dataset.productName || (state.productDescs[item]?.productName || ''),
       unit: tr.dataset.unit || '',
-      configId: tr.dataset.config || '',
-      sizeId: tr.dataset.size || '',
-      colorId: tr.dataset.color || '',
-      batchId: batch,
-      serialId: tr.dataset.serial || '',
-      warehouseId: tr.dataset.wh || '',
-      binLocation: tr.dataset.bin || globalBin,
-      count,
+      configId: tr.dataset.config || '', sizeId: tr.dataset.size || '',
+      colorId: tr.dataset.color || '', batchId: tr.querySelector('.batch')?.value || '',
+      serialId: tr.dataset.serial || '', warehouseId: tr.dataset.wh || '',
+      binLocation: tr.dataset.bin || globalBin, count,
     });
   });
-
-  if (!labels.length) { toast('warn', 'Set at least one label count > 0'); return; }
+  if (!labels.length) { toast('error', 'Set at least one label count > 0'); return; }
   await doPrint(labels);
 }
 
@@ -737,29 +897,24 @@ async function doPrint(labels) {
     toast('ok', `Sent ${result.count} label${result.count !== 1 ? 's' : ''} to printer`);
   } catch(e) {
     toast('error', e.message || 'Print failed');
-  } finally {
-    showLoading(false);
-  }
+  } finally { showLoading(false); }
 }
 
-// ── Preview ───────────────────────────────────────────────────────────────────
+// ── Preview (receiving labels → Labelary) ────────────────────────────────────
 
 async function previewRow(btn, tab) {
   const tr = btn.closest('tr');
-  const tableId = tab === 'po' ? 'poTable' : 'receiptTable';
-  const poNum = tab === 'po' ? document.getElementById('poInput').value.trim() : '';
   const item = tr.dataset.item;
-  const label = {
+  await doPreview({
     itemNumber: item,
     itemDesc: tr.querySelector('.desc')?.value || '',
-    poNumber: poNum || strField(state.receipt?.header || {}, ['PurchaseOrderNumber']),
+    poNumber: tab === 'po' ? document.getElementById('poInput').value.trim()
+                           : strField(state.receipt?.header || {}, ['PurchaseOrderNumber']),
     searchName: tr.dataset.searchName || (state.productDescs[item]?.searchName || ''),
     productName: tr.dataset.productName || (state.productDescs[item]?.productName || ''),
-    unit: tr.dataset.unit || '',
-    batchId: tr.querySelector('.batch')?.value || '',
+    unit: tr.dataset.unit || '', batchId: tr.querySelector('.batch')?.value || '',
     binLocation: tr.dataset.bin || document.getElementById('binInput').value,
-  };
-  await doPreview(label);
+  });
 }
 
 async function doPreview(label) {
@@ -770,32 +925,12 @@ async function doPreview(label) {
     document.getElementById('previewModal').classList.add('show');
   } catch(e) {
     toast('error', 'Preview failed: ' + (e.message || ''));
-  } finally {
-    showLoading(false);
-  }
+  } finally { showLoading(false); }
 }
 
 function closePreview(e) {
-  if (!e || e.target === e.currentTarget || e.target.classList.contains('close')) {
+  if (!e || e.target === e.currentTarget || e.target.classList.contains('close'))
     document.getElementById('previewModal').classList.remove('show');
-  }
-}
-
-// ── Printer test ──────────────────────────────────────────────────────────────
-
-async function testPrinter() {
-  const sel = document.getElementById('printerSel');
-  const name = sel.value;
-  if (!name) { toast('warn', 'Select a printer first'); return; }
-  // get IP from option text
-  const opt = sel.selectedOptions[0];
-  const match = opt.text.match(/\(([^)]+)\)/);
-  const ip = match ? match[1] : '';
-  if (!ip) { toast('warn', 'Could not determine printer IP'); return; }
-  try {
-    const r = await api(`/api/test-printer?ip=${encodeURIComponent(ip)}&port=9100`);
-    toast(r.reachable ? 'ok' : 'error', r.reachable ? `${name} reachable` : `${name} not reachable`);
-  } catch(e) { toast('error', e.message || 'Test failed'); }
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -809,8 +944,7 @@ async function api(url) {
 
 async function apiPost(url, body) {
   const r = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   const json = await r.json().catch(() => ({}));
@@ -827,29 +961,25 @@ function strField(obj, keys) {
   return '';
 }
 
+function fmtTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return isNaN(d) ? iso : d.toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
 function fmtDate(s) {
   if (!s) return '';
-  // OData /Date(ms)/ format
   const m = s.match(/\/Date\((-?\d+)\)\//);
   if (m) return new Date(parseInt(m[1])).toLocaleDateString();
-  // ISO
   try { return new Date(s).toLocaleDateString(); } catch { return s; }
 }
 
 function esc(s) {
-  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 let _loadingTimer;
-function showLoading(on) {
-  clearTimeout(_loadingTimer);
-  if (on) {
-    _loadingTimer = setTimeout(() => {
-      // show subtle spinner in header if load takes > 300ms
-    }, 300);
-  }
-}
+function showLoading(on) { clearTimeout(_loadingTimer); }
 
 let _toastTimer;
 function toast(type, msg) {

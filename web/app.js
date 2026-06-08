@@ -95,7 +95,6 @@ async function loadHealth() {
   try {
     const h = await api('/api/health');
     lastHealth = h;
-    $('siteName').textContent = h.site;
     const mdns = h.mdns && h.mdns.enabled
       ? `<span style="color:var(--good)">on</span> · http://${esc(h.mdns.host)}:${h.listeners.localPort}`
       : 'off';
