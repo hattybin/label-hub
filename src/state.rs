@@ -4,6 +4,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -105,6 +106,8 @@ pub struct AppState {
     pub date_field_cache: Arc<RwLock<HashMap<String, Option<String>>>>,
     /// Control-plane credentials, once enrolled.
     pub creds: Arc<Mutex<Option<NodeCreds>>>,
+    /// Set while a self-update is in progress; prevents concurrent triggers.
+    pub update_running: Arc<AtomicBool>,
 }
 
 impl AppState {
@@ -151,6 +154,7 @@ impl AppState {
             entity_cache: Arc::new(RwLock::new(HashMap::new())),
             date_field_cache: Arc::new(RwLock::new(HashMap::new())),
             creds: Arc::new(Mutex::new(creds)),
+            update_running: Arc::new(AtomicBool::new(false)),
         }
     }
 

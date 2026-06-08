@@ -92,6 +92,9 @@ chmod +x /tmp/label-hub-new
 # ── Deploy ───────────────────────────────────────────────────────────────────
 
 echo "→ Restarting service..."
+# Brief pause so any in-flight HTTP response (e.g. the /api/admin/update 202)
+# flushes to the caller before we kill the process.
+sleep 3
 systemctl stop label-hub 2>/dev/null || true
 install -m 0755 /tmp/label-hub-new "$BIN"
 rm -f /tmp/label-hub-new

@@ -1,8 +1,12 @@
 //! Site settings (the auto-print toggle) and a health/diagnostics endpoint.
 
+use std::sync::Arc;
+use std::sync::atomic::Ordering;
+
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::Deserialize;
 use serde_json::json;
+use tokio::process::Command;
 
 use crate::state::AppState;
 
@@ -91,4 +95,52 @@ pub async fn health(State(state): State<AppState>) -> impl IntoResponse {
             "configVersion": config_version,
         },
     }))
+}
+
+/// POST /api/admin/update — pull and install the latest binary from GitHub, then
+/// restart the service.  Returns 202 immediately; the update runs in the background.
+/// The service will restart ~3 s after the response arrives.
+///
+/// Requires a sudoers entry on the Pi:
+///   labelhub ALL=(root) NOPASSWD: /opt/label-hub-src/deploy/update.sh
+pub async fn update(State(state): State<AppState>) -> impl IntoResponse {
+    if state.update_running.swap(true, Ordering::SeqCst) {
+        return (
+            StatusCode::CONFLICT,
+            Json(json!({ "ok": false, "error": "update already in progress" })),
+        )
+            .into_response();
+    }
+
+    let flag = Arc::clone(&state.update_running);
+    tokio::spawn(async move {
+        tracing::info!("update: spawning /opt/label-hub-src/deploy/update.sh");
+        match Command::new("sudo")
+            .args(["/opt/label-hub-src/deploy/update.sh"])
+            .output()
+            .await
+        {
+            Ok(out) => {
+                // Successful update ends in `systemctl restart`, which kills this
+                // process before output() returns — we only reach here on failure.
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                tracing::error!(
+                    "update script exited {:?} (expected restart killed us first)\nstdout: {stdout}\nstderr: {stderr}",
+                    out.status.code()
+                );
+                flag.store(false, Ordering::SeqCst);
+            }
+            Err(e) => {
+                tracing::error!("update: failed to spawn script: {e}");
+                flag.store(false, Ordering::SeqCst);
+            }
+        }
+    });
+
+    (
+        StatusCode::ACCEPTED,
+        Json(json!({ "ok": true, "message": "update triggered; service will restart in ~5 s" })),
+    )
+        .into_response()
 }

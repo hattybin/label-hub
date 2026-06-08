@@ -71,6 +71,7 @@ async fn main() {
         .route("/api/preview-label", post(routes::preview::preview))
         .route("/api/settings", get(routes::settings::get).put(routes::settings::put))
         .route("/api/admin/refresh", post(routes::settings::refresh))
+        .route("/api/admin/update", post(routes::settings::update))
         .route("/api/health", get(routes::settings::health))
         .route("/api/d365/health", get(routes::d365::health))
         .route("/api/d365/query", get(routes::d365::query))
