@@ -74,6 +74,23 @@ async fn main() {
         .route("/api/health", get(routes::settings::health))
         .route("/api/d365/health", get(routes::d365::health))
         .route("/api/d365/query", get(routes::d365::query))
+        // PO
+        .route("/api/d365/po/:po_number", get(routes::d365::get_po))
+        .route("/api/d365/pos-by-vendor/:vendor_account", get(routes::d365::get_pos_by_vendor))
+        // Receipts
+        .route("/api/d365/receipts-for-po/:po_number", get(routes::d365::get_receipts_for_po))
+        .route("/api/d365/receipt/:receipt_number", get(routes::d365::get_receipt))
+        .route("/api/d365/recent-receipts", get(routes::d365::recent_receipts))
+        // Products
+        .route("/api/d365/product-descriptions", get(routes::d365::product_descriptions))
+        .route("/api/d365/product/:item_number", get(routes::d365::get_product))
+        // Discovery
+        .route("/api/d365/discover-entities", get(routes::d365::discover_entities))
+        // Inspect / field-discovery
+        .route("/api/d365/inspect/receipt", get(routes::d365::inspect_receipt))
+        .route("/api/d365/inspect/receipt-line", get(routes::d365::inspect_receipt_line))
+        .route("/api/d365/inspect/po-line", get(routes::d365::inspect_po_line))
+        .route("/api/d365/inspect/product", get(routes::d365::inspect_product))
         .fallback_service(serve_dir)
         .layer(DefaultBodyLimit::max(32 * 1024 * 1024))
         .layer(CorsLayer::permissive())

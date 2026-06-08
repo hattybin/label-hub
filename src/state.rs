@@ -2,13 +2,14 @@
 //! settings, and an SSE broadcast channel. Mirrors the JSON-file persistence
 //! model of the original Node prototype (printers.json / queue.json).
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::{broadcast, Mutex, RwLock};
 
 use crate::config::Config;
 
@@ -98,6 +99,10 @@ pub struct AppState {
     pub http: reqwest::Client,
     /// Cached D365 OData bearer token (token, expires_at_unix_secs).
     pub d365_token: Arc<Mutex<Option<(String, i64)>>>,
+    /// Cached D365 entity name resolution: key ("receiptHeaders" / "receiptLines") → entity name.
+    pub entity_cache: Arc<RwLock<HashMap<String, String>>>,
+    /// Cached receipt date field per entity name: entity_name → field name (None = not discoverable).
+    pub date_field_cache: Arc<RwLock<HashMap<String, Option<String>>>>,
     /// Control-plane credentials, once enrolled.
     pub creds: Arc<Mutex<Option<NodeCreds>>>,
 }
@@ -143,6 +148,8 @@ impl AppState {
                 .build()
                 .expect("build reqwest client"),
             d365_token: Arc::new(Mutex::new(None)),
+            entity_cache: Arc::new(RwLock::new(HashMap::new())),
+            date_field_cache: Arc::new(RwLock::new(HashMap::new())),
             creds: Arc::new(Mutex::new(creds)),
         }
     }

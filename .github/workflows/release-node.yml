@@ -1,0 +1,60 @@
+name: release-node
+
+# Builds the label-hub node binary for Pi and publishes it as a rolling
+# "latest" pre-release on every push to main. The Pi update script downloads
+# from this release — no Rust toolchain needed on the Pi.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: arm64
+            target: aarch64-unknown-linux-gnu
+          - arch: armhf
+            target: armv7-unknown-linux-gnueabihf
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cross
+        run: cargo install cross --locked
+      - name: Build
+        run: cross build --release -p label-hub --target ${{ matrix.target }}
+      - name: Stage binary
+        run: cp target/${{ matrix.target }}/release/label-hub label-hub-${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: label-hub-${{ matrix.arch }}
+          path: label-hub-${{ matrix.arch }}
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish rolling latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHA="${{ github.sha }}"
+          DATE=$(date -u +%Y-%m-%d)
+          gh release delete latest --yes 2>/dev/null || true
+          git tag -f latest "$SHA"
+          git push origin latest --force
+          gh release create latest dist/label-hub-arm64 dist/label-hub-armhf \
+            --title "Latest build ($DATE)" \
+            --notes "Commit: \`${SHA:0:7}\` — $DATE" \
+            --prerelease
