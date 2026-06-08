@@ -17,8 +17,11 @@ function toast(msg, kind = '') {
 async function api(path, opts) {
   const r = await fetch(path, opts);
   const ct = r.headers.get('content-type') || '';
-  const body = ct.includes('application/json') ? await r.json() : await r.text();
-  if (!r.ok) throw new Error((body && body.error) || body || ('HTTP ' + r.status));
+  const isJson = ct.includes('application/json');
+  const body = isJson ? await r.json() : await r.text();
+  if (!r.ok) throw new Error((isJson && body && body.error) || 'HTTP ' + r.status);
+  // Non-JSON 200 means the route doesn't exist yet (old binary serving HTML fallback)
+  if (!isJson) throw new Error('Route not available — service binary needs updating');
   return body;
 }
 
@@ -47,7 +50,7 @@ async function loadEnvSettings() {
       }
     }
   } catch (e) {
-    toast('Could not load settings: ' + e.message, 'bad');
+    toast('Settings unavailable: ' + e.message, 'bad');
   }
 }
 
