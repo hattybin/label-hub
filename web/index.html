@@ -16,21 +16,30 @@
   header { display:flex; align-items:center; gap:16px; padding:12px 20px;
            background:var(--panel); border-bottom:1px solid var(--line); }
   header h1 { font-size:16px; margin:0; font-weight:600; }
-  header .site { color:var(--accent); font-weight:700; }
   header a { color:var(--accent); font-size:13px; text-decoration:none; margin-left:8px; }
-  main { padding:20px; max-width:1200px; margin:0 auto; }
+  main { padding:20px; max-width:1100px; margin:0 auto; }
   .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px;
            padding:16px; margin-bottom:16px; }
-  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-  h2 { font-size:15px; margin:0 0 12px; }
-  label.fld { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
-  input { background:var(--panel2); border:1px solid var(--line); color:var(--text);
-          border-radius:6px; padding:8px 10px; font-size:14px; }
-  input:focus { outline:none; border-color:var(--accent); }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
+  h2 { font-size:15px; margin:0 0 14px; }
+  h3 { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em;
+       margin:16px 0 10px; font-weight:600; }
+  h3:first-of-type { margin-top:0; }
+  label.fld { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); flex:1; min-width:160px; }
+  label.fld.fixed { flex:none; }
+  input, select { background:var(--panel2); border:1px solid var(--line); color:var(--text);
+          border-radius:6px; padding:8px 10px; font-size:14px; width:100%; }
+  input:focus, select:focus { outline:none; border-color:var(--accent); }
+  input[type=number] { width:90px; }
+  .secret-wrap { position:relative; }
+  .secret-wrap input { padding-right:60px; }
+  .secret-wrap button { position:absolute; right:6px; top:50%; transform:translateY(-50%);
+    background:none; border:none; color:var(--muted); cursor:pointer; font-size:12px; padding:3px 6px; }
   button.btn { background:var(--accent); color:#fff; border:none; border-radius:6px;
-               padding:8px 14px; cursor:pointer; font-size:13px; font-weight:500; }
+               padding:8px 14px; cursor:pointer; font-size:13px; font-weight:500; white-space:nowrap; }
   button.btn:hover { background:var(--accent2); }
   button.btn.ghost { background:var(--panel2); color:var(--text); border:1px solid var(--line); }
+  button.btn.ghost:hover { border-color:var(--accent); }
   button.btn.danger { background:var(--bad); }
   button.btn.small { padding:5px 10px; font-size:12px; }
   table { width:100%; border-collapse:collapse; font-size:13px; }
@@ -42,11 +51,19 @@
   .mono { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
   code { background:var(--panel2); padding:2px 6px; border-radius:4px; font-size:12px; }
   pre { background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:12px;
-        overflow:auto; font-size:12px; }
+        overflow:auto; font-size:12px; margin:0; }
+  details summary { cursor:pointer; color:var(--muted); font-size:12px; user-select:none; padding:4px 0; }
+  details summary:hover { color:var(--text); }
+  details[open] summary { margin-bottom:12px; }
+  .restart-notice { display:none; background:#1a2a1a; border:1px solid var(--good);
+                    color:var(--good); border-radius:6px; padding:10px 14px; font-size:13px; margin-top:12px; }
+  .restart-notice.show { display:block; }
+  .warn-tag { background:#3a2800; border:1px solid var(--warn); color:var(--warn);
+              border-radius:4px; font-size:11px; padding:2px 8px; display:inline-block; }
   #toast { position:fixed; bottom:20px; right:20px; display:flex; flex-direction:column; gap:8px; z-index:60; }
   .toast { background:var(--panel2); border:1px solid var(--line); border-left:3px solid var(--accent);
            padding:10px 14px; border-radius:6px; font-size:13px; box-shadow:0 4px 12px rgba(0,0,0,.4); }
-  .toast.bad { border-left-color:var(--bad); }
+  .toast.bad  { border-left-color:var(--bad); }
   .toast.good { border-left-color:var(--good); }
 </style>
 </head>
@@ -57,32 +74,128 @@
 </header>
 
 <main>
-  <div class="panel">
-    <h2>Health</h2>
-    <div id="healthBox" class="mono"></div>
+
+<!-- ── Configuration ─────────────────────────────────────────────────────── -->
+<div class="panel">
+  <h2>Configuration</h2>
+
+  <h3>Site</h3>
+  <div class="row">
+    <label class="fld"><span>Site Name</span>
+      <input id="cfg-SITE_NAME" placeholder="PLANT1">
+    </label>
+    <label class="fld"><span>Public URL</span>
+      <input id="cfg-PUBLIC_URL" placeholder="https://labels.example.com">
+    </label>
+    <label class="fld"><span>Inbound Secret</span>
+      <div class="secret-wrap">
+        <input type="password" id="cfg-INBOUND_SECRET" placeholder="(unchanged)" autocomplete="new-password">
+        <button type="button" onclick="toggleSecret('cfg-INBOUND_SECRET',this)">Show</button>
+      </div>
+    </label>
+    <label class="fld fixed"><span>Default Printer</span>
+      <select id="cfg-DEFAULT_PRINTER"><option value="">(none)</option></select>
+    </label>
   </div>
 
-  <div class="panel">
-    <h2>Printer profiles</h2>
-    <div class="row" style="margin-bottom:12px">
-      <label class="fld">Name<input id="pName" placeholder="LINE1-ZEBRA"></label>
-      <label class="fld">IP / host<input id="pIp" placeholder="192.168.1.50"></label>
-      <label class="fld">Port<input id="pPort" type="number" value="9100" style="width:90px"></label>
-      <button class="btn" style="align-self:flex-end" onclick="savePrinter()">Save printer</button>
+  <h3>D365 Connection</h3>
+  <div class="row">
+    <label class="fld"><span>Base URL</span>
+      <input id="cfg-D365_BASE_URL" placeholder="https://org.sandbox.ax.dynamics.com">
+    </label>
+    <label class="fld fixed"><span>Company</span>
+      <input id="cfg-D365_COMPANY" placeholder="USMF" style="width:120px">
+    </label>
+    <label class="fld"><span>Tenant ID</span>
+      <input id="cfg-AZURE_TENANT_ID" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+    </label>
+    <label class="fld"><span>Client ID</span>
+      <input id="cfg-AZURE_CLIENT_ID" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+    </label>
+    <label class="fld"><span>Client Secret</span>
+      <div class="secret-wrap">
+        <input type="password" id="cfg-AZURE_CLIENT_SECRET" placeholder="(unchanged)" autocomplete="new-password">
+        <button type="button" onclick="toggleSecret('cfg-AZURE_CLIENT_SECRET',this)">Show</button>
+      </div>
+    </label>
+  </div>
+
+  <details style="margin-top:14px">
+    <summary>D365 entity overrides <span class="muted">(leave blank for auto-discovery)</span></summary>
+    <div class="row">
+      <label class="fld"><span>Receipt Header Entity</span>
+        <input id="cfg-D365_RECEIPT_HEADER_ENTITY" placeholder="ProductReceiptHeader">
+      </label>
+      <label class="fld"><span>Receipt Lines Entity</span>
+        <input id="cfg-D365_RECEIPT_LINES_ENTITY" placeholder="ProductReceiptLinesV2">
+      </label>
+      <label class="fld"><span>Receipt Date Field</span>
+        <input id="cfg-D365_RECEIPT_DATE_FIELD" placeholder="ProductReceiptDate">
+      </label>
     </div>
-    <table>
-      <thead><tr><th>Name</th><th>Address</th><th>Reachable</th><th></th></tr></thead>
-      <tbody id="printerBody"></tbody>
-    </table>
-    <div class="empty" id="printerEmpty">No printers yet. Add one above.</div>
-  </div>
+  </details>
 
-  <div class="panel">
-    <h2>D365 External Service mapping</h2>
-    <p class="muted">Configure the D365 External Service operation to POST to this hub. The
-    hub accepts raw ZPL with the printer in a header (recommended):</p>
-    <pre id="d365Help"></pre>
+  <details style="margin-top:14px">
+    <summary>Network <span class="warn-tag">restart required</span></summary>
+    <div class="row" style="margin-top:10px">
+      <label class="fld fixed"><span>mDNS</span>
+        <select id="cfg-MDNS_ENABLE" style="width:80px">
+          <option value="false">Off</option>
+          <option value="true">On</option>
+        </select>
+      </label>
+      <label class="fld fixed"><span>mDNS Hostname</span>
+        <input id="cfg-MDNS_HOSTNAME" placeholder="printlabels" style="width:160px">
+      </label>
+      <label class="fld fixed"><span>Local Port</span>
+        <input type="number" id="cfg-LOCAL_PORT" placeholder="8081">
+      </label>
+      <label class="fld fixed"><span>Public Port</span>
+        <input type="number" id="cfg-PUBLIC_PORT" placeholder="8080">
+      </label>
+    </div>
+  </details>
+
+  <div class="row" style="margin-top:18px;gap:8px">
+    <button class="btn" onclick="saveEnvSettings()">Save to .env</button>
+    <button class="btn ghost" onclick="restartService()">Restart Service</button>
+    <button class="btn ghost" onclick="triggerUpdate()">Update to Latest</button>
   </div>
+  <div class="restart-notice" id="restartNotice">
+    Settings saved. Click <strong>Restart Service</strong> to apply changes.
+  </div>
+</div>
+
+<!-- ── Printer Profiles ───────────────────────────────────────────────────── -->
+<div class="panel">
+  <h2>Printer profiles</h2>
+  <div class="row" style="margin-bottom:12px">
+    <label class="fld">Name<input id="pName" placeholder="LINE1-ZEBRA"></label>
+    <label class="fld">IP / host<input id="pIp" placeholder="192.168.1.50"></label>
+    <label class="fld fixed">Port<input id="pPort" type="number" value="9100" style="width:90px"></label>
+    <button class="btn" style="align-self:flex-end" onclick="savePrinter()">Save printer</button>
+  </div>
+  <table>
+    <thead><tr><th>Name</th><th>Address</th><th>Reachable</th><th></th></tr></thead>
+    <tbody id="printerBody"></tbody>
+  </table>
+  <div class="empty" id="printerEmpty">No printers yet. Add one above.</div>
+</div>
+
+<!-- ── System ────────────────────────────────────────────────────────────── -->
+<div class="panel">
+  <h2>System</h2>
+  <details open>
+    <summary>Diagnostics</summary>
+    <div id="healthBox" class="mono" style="font-size:12px;margin-top:8px"></div>
+  </details>
+  <details style="margin-top:14px">
+    <summary>D365 External Service mapping</summary>
+    <p class="muted" style="margin:10px 0 6px;font-size:12px">Configure in D365: Warehouse management › Setup › External services</p>
+    <pre id="d365Help"></pre>
+  </details>
+</div>
+
 </main>
 
 <div id="toast"></div>

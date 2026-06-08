@@ -32,7 +32,7 @@ Environment=DATA_DIR=/var/lib/label-hub
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/label-hub
+ReadWritePaths=/var/lib/label-hub /opt/label-hub
 
 [Install]
 WantedBy=multi-user.target

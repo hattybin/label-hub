@@ -22,11 +22,113 @@ async function api(path, opts) {
   return body;
 }
 
+// ── .env settings ─────────────────────────────────────────────────────────────
+
+async function loadEnvSettings() {
+  try {
+    const cfg = await api('/api/admin/env');
+    // Populate printer dropdown first (printers may not be loaded yet)
+    populatePrinterDropdown(cfg['DEFAULT_PRINTER'] || '');
+
+    const skip = ['DEFAULT_PRINTER'];  // handled separately
+    for (const [k, v] of Object.entries(cfg)) {
+      if (skip.includes(k)) continue;
+      const el = $('cfg-' + k);
+      if (!el) continue;
+      if (el.tagName === 'SELECT') {
+        el.value = v;
+      } else if (el.type === 'password') {
+        // Leave blank so placeholder shows; store the masked sentinel
+        el.dataset.masked = v === '***' ? '***' : '';
+        el.value = '';
+        el.placeholder = v === '***' ? '(set — enter new value to change)' : '(not set)';
+      } else {
+        el.value = v;
+      }
+    }
+  } catch (e) {
+    toast('Could not load settings: ' + e.message, 'bad');
+  }
+}
+
+function populatePrinterDropdown(currentDefault) {
+  const sel = $('cfg-DEFAULT_PRINTER');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">(none — require X-Printer-Name header)</option>' +
+    printers.map(p => `<option value="${esc(p.name)}" ${p.name === currentDefault ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+  if (currentDefault) sel.value = currentDefault;
+}
+
+async function saveEnvSettings() {
+  const KEYS = [
+    'SITE_NAME', 'PUBLIC_URL', 'INBOUND_SECRET', 'DEFAULT_PRINTER',
+    'MDNS_ENABLE', 'MDNS_HOSTNAME', 'LOCAL_PORT', 'PUBLIC_PORT',
+    'AZURE_TENANT_ID', 'AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET',
+    'D365_BASE_URL', 'D365_COMPANY',
+    'D365_RECEIPT_HEADER_ENTITY', 'D365_RECEIPT_LINES_ENTITY', 'D365_RECEIPT_DATE_FIELD',
+  ];
+  const body = {};
+  for (const k of KEYS) {
+    const el = $('cfg-' + k);
+    if (!el) continue;
+    if (el.type === 'password') {
+      // If blank and was previously masked → send sentinel so backend skips it
+      body[k] = el.value || el.dataset.masked || '';
+    } else {
+      body[k] = el.value;
+    }
+  }
+  try {
+    const r = await api('/api/admin/env', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    toast(r.message || 'Saved', 'good');
+    $('restartNotice').classList.add('show');
+  } catch (e) {
+    toast('Save failed: ' + e.message, 'bad');
+  }
+}
+
+function toggleSecret(id, btn) {
+  const input = $(id);
+  if (input.type === 'password') { input.type = 'text'; btn.textContent = 'Hide'; }
+  else { input.type = 'password'; btn.textContent = 'Show'; }
+}
+
+async function restartService() {
+  if (!confirm('Restart the service now? It will be unreachable for a few seconds.')) return;
+  try {
+    await api('/api/admin/restart', { method: 'POST' });
+    toast('Restarting — page may take a moment to reload', 'good');
+    $('restartNotice').classList.remove('show');
+    setTimeout(() => location.reload(), 4000);
+  } catch (e) {
+    toast('Restart failed: ' + e.message, 'bad');
+  }
+}
+
+async function triggerUpdate() {
+  if (!confirm('Download and install the latest binary, then restart? This takes ~30 s.')) return;
+  try {
+    await api('/api/admin/update', { method: 'POST' });
+    toast('Update triggered — service will restart in ~5 s', 'good');
+    $('restartNotice').classList.remove('show');
+    setTimeout(() => location.reload(), 8000);
+  } catch (e) {
+    toast('Update failed: ' + e.message, 'bad');
+  }
+}
+
 // ── Printers ─────────────────────────────────────────────────────────────────
 
 async function loadPrinters() {
-  try { printers = await api('/api/printers'); renderPrinters(); }
-  catch (e) { toast('Load printers failed: ' + e.message, 'bad'); }
+  try {
+    printers = await api('/api/printers');
+    renderPrinters();
+    populatePrinterDropdown($('cfg-DEFAULT_PRINTER')?.value || '');
+  } catch (e) { toast('Load printers failed: ' + e.message, 'bad'); }
 }
 
 function renderPrinters() {
@@ -140,4 +242,4 @@ Full inbound endpoint: ${base}/api/print/inbound`;
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 loadHealth();
-loadPrinters();
+loadPrinters().then(() => loadEnvSettings());

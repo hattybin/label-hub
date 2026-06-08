@@ -1,5 +1,8 @@
-//! Site settings (the auto-print toggle) and a health/diagnostics endpoint.
+//! Site settings (the auto-print toggle), a health/diagnostics endpoint,
+//! and a .env read/write API so operators can edit config from the UI.
 
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
@@ -9,6 +12,152 @@ use serde_json::json;
 use tokio::process::Command;
 
 use crate::state::AppState;
+
+// ── .env editor ──────────────────────────────────────────────────────────────
+
+const SECRET_KEYS: &[&str] = &["INBOUND_SECRET", "AZURE_CLIENT_SECRET"];
+
+const EDITABLE_KEYS: &[&str] = &[
+    // Site
+    "SITE_NAME", "PUBLIC_URL", "INBOUND_SECRET", "DEFAULT_PRINTER",
+    // Network (restart required)
+    "MDNS_ENABLE", "MDNS_HOSTNAME", "LOCAL_PORT", "PUBLIC_PORT",
+    // D365
+    "AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET",
+    "D365_BASE_URL", "D365_COMPANY",
+    // D365 entity overrides
+    "D365_RECEIPT_HEADER_ENTITY", "D365_RECEIPT_LINES_ENTITY", "D365_RECEIPT_DATE_FIELD",
+];
+
+fn env_path() -> PathBuf {
+    std::env::current_dir().unwrap_or_default().join(".env")
+}
+
+fn read_env_map() -> HashMap<String, String> {
+    let Ok(raw) = std::fs::read_to_string(env_path()) else {
+        return HashMap::new();
+    };
+    let mut map = HashMap::new();
+    for line in raw.lines() {
+        let t = line.trim();
+        if t.is_empty() || t.starts_with('#') {
+            continue;
+        }
+        if let Some((k, v)) = t.split_once('=') {
+            map.insert(k.trim().to_string(), v.trim().to_string());
+        }
+    }
+    map
+}
+
+/// GET /api/admin/env — current .env values; secrets masked as "***".
+pub async fn get_env(_: State<AppState>) -> impl IntoResponse {
+    let map = read_env_map();
+    let mut out = serde_json::Map::new();
+    for key in EDITABLE_KEYS {
+        let val = map.get(*key).cloned().unwrap_or_default();
+        let display = if SECRET_KEYS.contains(key) && !val.is_empty() {
+            "***".to_string()
+        } else {
+            val
+        };
+        out.insert(key.to_string(), json!(display));
+    }
+    Json(serde_json::Value::Object(out))
+}
+
+/// POST /api/admin/env — write updated key-value pairs to .env.
+/// Preserves comments and line order. Sending "***" for a secret key keeps
+/// the existing value unchanged.
+pub async fn put_env(
+    State(_state): State<AppState>,
+    Json(input): Json<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let path = env_path();
+    let existing_raw = std::fs::read_to_string(&path).unwrap_or_default();
+
+    let updates: HashMap<String, String> = input
+        .into_iter()
+        .filter(|(k, v)| {
+            EDITABLE_KEYS.contains(&k.as_str())
+                && !(SECRET_KEYS.contains(&k.as_str()) && v == "***")
+        })
+        .collect();
+
+    let mut updated_keys: HashSet<String> = HashSet::new();
+    let mut new_lines: Vec<String> = Vec::new();
+
+    for line in existing_raw.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            new_lines.push(line.to_string());
+            continue;
+        }
+        if let Some((k, _)) = trimmed.split_once('=') {
+            let k = k.trim();
+            if let Some(new_val) = updates.get(k) {
+                new_lines.push(format!("{k}={new_val}"));
+                updated_keys.insert(k.to_string());
+                continue;
+            }
+        }
+        new_lines.push(line.to_string());
+    }
+
+    // Append any keys that weren't already in the file
+    for (k, v) in &updates {
+        if !updated_keys.contains(k) {
+            new_lines.push(format!("{k}={v}"));
+        }
+    }
+
+    let content = new_lines.join("\n") + "\n";
+    let tmp = path.with_extension("tmp");
+    if let Err(e) =
+        std::fs::write(&tmp, &content).and_then(|_| std::fs::rename(&tmp, &path))
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "ok": false, "error": e.to_string() })),
+        )
+            .into_response();
+    }
+
+    Json(json!({ "ok": true, "message": "Saved — restart the service to apply changes." }))
+        .into_response()
+}
+
+/// POST /api/admin/restart — restart the service without downloading a new binary.
+/// Requires sudoers: labelhub ALL=(root) NOPASSWD: /usr/bin/systemctl restart label-hub
+pub async fn restart(State(state): State<AppState>) -> impl IntoResponse {
+    if state.update_running.swap(true, Ordering::SeqCst) {
+        return (
+            StatusCode::CONFLICT,
+            Json(json!({ "ok": false, "error": "update already in progress" })),
+        )
+            .into_response();
+    }
+    let flag = Arc::clone(&state.update_running);
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        match Command::new("sudo")
+            .args(["systemctl", "restart", "label-hub"])
+            .output()
+            .await
+        {
+            Ok(_) => flag.store(false, Ordering::SeqCst),
+            Err(e) => {
+                tracing::error!("restart failed: {e}");
+                flag.store(false, Ordering::SeqCst);
+            }
+        }
+    });
+    (
+        StatusCode::ACCEPTED,
+        Json(json!({ "ok": true, "message": "Service restarting in ~2 s" })),
+    )
+        .into_response()
+}
 
 /// POST /api/admin/refresh — trigger an immediate control-plane config pull.
 /// Called by the C2 over the mesh after editing a node's config.
