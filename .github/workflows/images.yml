@@ -71,15 +71,15 @@ jobs:
 
       - name: Write pi-gen config
         run: |
-          cat > images/pi-gen/_pi-gen/config <<EOF
-          IMG_NAME=labelhub-${{ matrix.arch }}
-          RELEASE=trixie
-          ARCH=${{ matrix.arch }}
-          DEPLOY_COMPRESSION=xz
-          DISABLE_FIRST_BOOT_USER_RENAME=1
-          TARGET_HOSTNAME=labelhub
-          STAGE_LIST="stage0 stage1 stage2 stage-labelhub"
-          EOF
+          printf '%s\n' \
+            'IMG_NAME=labelhub-${{ matrix.arch }}' \
+            'RELEASE=trixie' \
+            'ARCH=${{ matrix.arch }}' \
+            'DEPLOY_COMPRESSION=xz' \
+            'DISABLE_FIRST_BOOT_USER_RENAME=1' \
+            'TARGET_HOSTNAME=labelhub' \
+            'STAGE_LIST=stage0 stage1 stage2 stage-labelhub' \
+            > images/pi-gen/_pi-gen/config
 
       - name: Copy stage into pi-gen
         run: cp -r images/pi-gen/stage-labelhub images/pi-gen/_pi-gen/stage-labelhub
@@ -126,29 +126,9 @@ jobs:
           done
 
           gh release create latest-images \
-            dist/labelhub-arm64-${DATE}.img.xz \
-            dist/labelhub-armhf-${DATE}.img.xz \
+            "dist/labelhub-arm64-${DATE}.img.xz" \
+            "dist/labelhub-armhf-${DATE}.img.xz" \
             dist/SHA256SUMS \
-            --title "Pi images ($DATE)" \
-            --notes "$(cat <<'EOF'
-## Raspberry Pi images
-
-Flash with [Raspberry Pi Imager](https://www.raspberrypi.com/software/) or:
-```
-xzcat labelhub-arm64-*.img.xz | sudo dd of=/dev/sdX bs=4M status=progress
-```
-
-**After flashing:** edit `labelhub.conf` on the FAT boot partition (visible from any computer).
-Fill in at minimum `SITE_NAME` and `INBOUND_SECRET`, then boot.
-
-The console will be at `http://labelhub.local:8081` (or the hostname you set).
-
-| Image | Boards |
-|---|---|
-| `labelhub-arm64-*.img.xz` | Pi 3, 4, 5, Zero 2 / Zero 2 W (64-bit OS) |
-| `labelhub-armhf-*.img.xz` | All of the above + Pi Zero / Zero W (32-bit, universal) |
-
-See [images/README.md](https://github.com/${{ github.repository }}/blob/main/images/README.md) for full instructions.
-EOF
-)" \
+            --title "Pi images (${DATE})" \
+            --notes-file images/RELEASE_NOTES.md \
             --prerelease
