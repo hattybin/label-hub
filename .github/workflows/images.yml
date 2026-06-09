@@ -16,6 +16,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   # ── 1. Cross-compile the node binary for each architecture ──────────────────
   binaries:
@@ -54,16 +57,13 @@ jobs:
           name: node-${{ matrix.arch }}
           path: ./node-bin
 
-      - name: Download azbridge
+      - name: Download azbridge (arm64 only — no armhf package upstream)
+        if: matrix.arch == 'arm64'
         env:
           AZBRIDGE_VERSION: "0.16.1"
         run: |
-          case "${{ matrix.arch }}" in
-            arm64) DEB_ARCH="linux-arm64" ;;
-            armhf) DEB_ARCH="linux-arm"   ;;
-          esac
           curl -fsSL \
-            "https://github.com/Azure/azure-relay-bridge/releases/download/v${AZBRIDGE_VERSION}/azbridge.${AZBRIDGE_VERSION}.${DEB_ARCH}.deb" \
+            "https://github.com/Azure/azure-relay-bridge/releases/download/v${AZBRIDGE_VERSION}/azbridge.${AZBRIDGE_VERSION}.linux-arm64.deb" \
             -o /tmp/azbridge.deb
 
       - name: Stage files for pi-gen
@@ -76,11 +76,10 @@ jobs:
           cp images/firstboot/labelhub-firstboot.service                "$STAGE/"
           cp images/firstboot/labelhub-firstboot.sh                     "$STAGE/"
           cp images/labelhub.conf.example                               "$STAGE/"
-          cp /tmp/azbridge.deb                                          "$STAGE/azbridge.deb"
+          [ -f /tmp/azbridge.deb ] && cp /tmp/azbridge.deb "$STAGE/azbridge.deb" || true
 
       - name: Fetch pi-gen
-        run: |
-          git clone --depth=1 https://github.com/RPi-Distro/pi-gen images/pi-gen/_pi-gen
+        run: git clone --depth=1 https://github.com/RPi-Distro/pi-gen images/pi-gen/_pi-gen
 
       - name: Write pi-gen config
         run: |
@@ -132,7 +131,6 @@ jobs:
           git tag -f latest-images "$SHA"
           git push origin latest-images --force
 
-          # Rename to include date for human readability
           for f in dist/*.img.xz; do
             base=$(basename "$f" .img.xz)
             mv "$f" "dist/${base}-${DATE}.img.xz"
