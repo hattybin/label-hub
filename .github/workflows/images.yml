@@ -1,12 +1,10 @@
 name: build-pi-images
 
-# Builds the Raspberry Pi images and publishes them as a rolling "latest-images"
-# pre-release. Triggered manually or on a versioned release.
+# Builds Raspberry Pi images by injecting label-hub into the official
+# Raspberry Pi OS Lite base image via loopback mount.
+# No Docker, no pi-gen, no chroot — fast (~8 min total).
 #
-# pi-gen runs inside Docker and takes ~20 min per architecture, so this workflow
-# is kept separate from the binary CI and run on demand.
-#
-# Trigger: workflow_dispatch, or automatically on published (versioned) releases.
+# Trigger: workflow_dispatch (manual) or on published versioned releases.
 
 on:
   workflow_dispatch:
@@ -18,9 +16,10 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  AZBRIDGE_VERSION: "0.16.1"
 
 jobs:
-  # ── 1. Cross-compile the node binary for each architecture ──────────────────
+  # ── 1. Cross-compile node binary for each architecture ──────────────────────
   binaries:
     runs-on: ubuntu-latest
     strategy:
@@ -29,20 +28,20 @@ jobs:
           - arch: arm64
             target: aarch64-unknown-linux-gnu
           - arch: armhf
-            target: arm-unknown-linux-gnueabihf   # ARMv6 baseline — runs on all Pis
+            target: arm-unknown-linux-gnueabihf
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Install cross
         run: cargo install cross --locked
-      - name: Cross-compile node
+      - name: Cross-compile
         run: cross build --release -p label-hub --target ${{ matrix.target }}
       - uses: actions/upload-artifact@v4
         with:
           name: node-${{ matrix.arch }}
           path: target/${{ matrix.target }}/release/label-hub
 
-  # ── 2. Build one image per architecture (needs its binary) ──────────────────
+  # ── 2. Build image for each architecture ────────────────────────────────────
   images:
     needs: binaries
     runs-on: ubuntu-latest
@@ -57,59 +56,31 @@ jobs:
           name: node-${{ matrix.arch }}
           path: ./node-bin
 
-      - name: Download azbridge (arm64 only — no armhf package upstream)
+      - name: Download azbridge (arm64 only)
         if: matrix.arch == 'arm64'
-        env:
-          AZBRIDGE_VERSION: "0.16.1"
         run: |
           curl -fsSL \
             "https://github.com/Azure/azure-relay-bridge/releases/download/v${AZBRIDGE_VERSION}/azbridge.${AZBRIDGE_VERSION}.linux-arm64.deb" \
             -o /tmp/azbridge.deb
 
-      - name: Stage files for pi-gen
-        run: |
-          STAGE=images/pi-gen/stage-labelhub/files
-          mkdir -p "$STAGE/web"
-          install -m 0755 node-bin/label-hub                           "$STAGE/label-hub"
-          cp -r web/.                                                   "$STAGE/web/"
-          cp deploy/label-hub.service                                   "$STAGE/"
-          cp images/firstboot/labelhub-firstboot.service                "$STAGE/"
-          cp images/firstboot/labelhub-firstboot.sh                     "$STAGE/"
-          cp images/labelhub.conf.example                               "$STAGE/"
-          [ -f /tmp/azbridge.deb ] && cp /tmp/azbridge.deb "$STAGE/azbridge.deb" || true
-
-      - name: Fetch pi-gen
-        run: git clone --depth=1 https://github.com/RPi-Distro/pi-gen images/pi-gen/_pi-gen
-
-      - name: Write pi-gen config
-        run: |
-          printf '%s\n' \
-            'IMG_NAME=labelhub-${{ matrix.arch }}' \
-            'RELEASE=trixie' \
-            'ARCH=${{ matrix.arch }}' \
-            'DEPLOY_COMPRESSION=xz' \
-            'DISABLE_FIRST_BOOT_USER_RENAME=1' \
-            'TARGET_HOSTNAME=labelhub' \
-            'STAGE_LIST="stage0 stage1 stage2 stage-labelhub"' \
-            > images/pi-gen/_pi-gen/config
-
-      - name: Copy stage into pi-gen
-        run: cp -r images/pi-gen/stage-labelhub images/pi-gen/_pi-gen/stage-labelhub
-
       - name: Build image
-        run: cd images/pi-gen/_pi-gen && sudo ./build-docker.sh
-
-      - name: Compute checksums
-        run: cd images/pi-gen/_pi-gen/deploy && sha256sum *.img.xz > SHA256SUMS
+        run: |
+          chmod +x node-bin/label-hub
+          AZBRIDGE_ARG=""
+          [ -f /tmp/azbridge.deb ] && AZBRIDGE_ARG="/tmp/azbridge.deb"
+          sudo bash images/build-image.sh \
+            ${{ matrix.arch }} \
+            node-bin/label-hub \
+            $AZBRIDGE_ARG
 
       - uses: actions/upload-artifact@v4
         with:
           name: image-${{ matrix.arch }}
           path: |
-            images/pi-gen/_pi-gen/deploy/*.img.xz
-            images/pi-gen/_pi-gen/deploy/SHA256SUMS
+            labelhub-${{ matrix.arch }}-*.img.xz
+            labelhub-${{ matrix.arch }}-*.img.xz.sha256
 
-  # ── 3. Publish both images to a rolling "latest-images" release ─────────────
+  # ── 3. Publish to rolling latest-images release ─────────────────────────────
   publish:
     needs: images
     runs-on: ubuntu-latest
@@ -121,25 +92,15 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Publish rolling image release
+      - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           SHA="${{ github.sha }}"
-          DATE=$(date -u +%Y-%m-%d)
           gh release delete latest-images --yes 2>/dev/null || true
           git tag -f latest-images "$SHA"
           git push origin latest-images --force
-
-          for f in dist/*.img.xz; do
-            base=$(basename "$f" .img.xz)
-            mv "$f" "dist/${base}-${DATE}.img.xz"
-          done
-
-          gh release create latest-images \
-            "dist/labelhub-arm64-${DATE}.img.xz" \
-            "dist/labelhub-armhf-${DATE}.img.xz" \
-            dist/SHA256SUMS \
-            --title "Pi images (${DATE})" \
+          gh release create latest-images dist/*.img.xz dist/*.sha256 \
+            --title "Pi images ($(date -u +%Y-%m-%d))" \
             --notes-file images/RELEASE_NOTES.md \
             --prerelease
