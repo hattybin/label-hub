@@ -19,6 +19,17 @@ SITE_NAME=PLANT1
 # Use this same value in D365 External Service > Authentication secret.
 INBOUND_SECRET=
 
+# ── WiFi ─────────────────────────────────────────────────────────────────────
+
+# Two-letter ISO 3166 country code. Sets the regulatory domain so the radio is
+# not rfkill-blocked on boot. Default in the image is US; change if deploying
+# in a different country.
+WIFI_COUNTRY=US
+
+# WiFi credentials (leave both blank if the Pi will use a wired connection).
+WIFI_SSID=
+WIFI_PASSWORD=
+
 # ── SSH / access ──────────────────────────────────────────────────────────────
 
 # SSH username created on first boot.

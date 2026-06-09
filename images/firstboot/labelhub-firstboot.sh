@@ -60,6 +60,9 @@ D365_COMPANY="${D365_COMPANY:-}"
 CONTROL_URL="${CONTROL_URL:-}"
 ENROLLMENT_TOKEN="${ENROLLMENT_TOKEN:-}"
 TAILSCALE_AUTHKEY="${TAILSCALE_AUTHKEY:-}"
+WIFI_COUNTRY="${WIFI_COUNTRY:-US}"
+WIFI_SSID="${WIFI_SSID:-}"
+WIFI_PASSWORD="${WIFI_PASSWORD:-}"
 
 # ── Hostname ──────────────────────────────────────────────────────────────────
 
@@ -68,6 +71,29 @@ if [ -n "$HOSTNAME" ]; then
   hostnamectl set-hostname "$HOSTNAME" 2>/dev/null || echo "$HOSTNAME" > /etc/hostname
   # Update /etc/hosts so 'localhost' lookups still work
   sed -i "s/127\.0\.1\.1.*/127.0.1.1\t${HOSTNAME}/" /etc/hosts || true
+fi
+
+# ── WiFi ─────────────────────────────────────────────────────────────────────
+
+# Always apply the regulatory domain so WiFi isn't rfkill-blocked.
+# Default is US (pre-set in the image); override per-site with WIFI_COUNTRY.
+if [ -f /etc/default/crda ]; then
+  sed -i "s/^REGDOMAIN=.*/REGDOMAIN=${WIFI_COUNTRY}/" /etc/default/crda
+else
+  echo "REGDOMAIN=${WIFI_COUNTRY}" > /etc/default/crda
+fi
+rfkill unblock wifi 2>/dev/null || true
+
+if [ -n "$WIFI_SSID" ]; then
+  log "configuring WiFi: $WIFI_SSID"
+  nmcli radio wifi on 2>/dev/null || true
+  nmcli connection delete "labelhub-wifi" 2>/dev/null || true
+  nmcli connection add type wifi con-name "labelhub-wifi" \
+    ssid "$WIFI_SSID" \
+    wifi-sec.key-mgmt wpa-psk \
+    wifi-sec.psk "$WIFI_PASSWORD" \
+    connection.autoconnect yes 2>/dev/null || \
+    log "WARNING: nmcli WiFi config failed — configure manually"
 fi
 
 # ── SSH user ─────────────────────────────────────────────────────────────────

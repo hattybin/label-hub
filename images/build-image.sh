@@ -113,6 +113,11 @@ if [ "$ARCH" = "arm64" ] && [ -f "images/pocketterm35/waveshare-35dpi-5b.dtbo" ]
     >> "$MOUNT_BOOT/config.txt"
 fi
 
+# ── WiFi regulatory domain (prevents rfkill soft-block on first boot) ─────────
+# Pi OS will not unblock WiFi without a country set. Default to US; firstboot
+# overrides this from WIFI_COUNTRY in labelhub.conf if present.
+printf '%s\n' 'REGDOMAIN=US' > "$MOUNT_ROOT/etc/default/crda"
+
 # ── Enable SSH on first boot ──────────────────────────────────────────────────
 touch "$MOUNT_BOOT/ssh"
 
