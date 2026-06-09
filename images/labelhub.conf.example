@@ -1,25 +1,66 @@
 # Label Hub node configuration — first-boot provisioning.
 #
-# After flashing the image, copy this file to the FAT "boot" partition as
-# `labelhub.conf` (it's editable from any computer). On first boot the node reads
-# it, joins Tailscale, enrolls with the control plane, and starts the service.
+# After flashing the image, copy or rename this file to `labelhub.conf` on the
+# FAT boot partition (visible from Windows / macOS / Linux). On first boot the
+# node reads it, configures itself, and starts the service. The file is NOT
+# deleted — it stays on the partition as a reference, but the provisioning
+# service disables itself so it won't run again.
 #
-# If this file is absent, the node boots in standalone local mode (console on
-# http://printlabels.local:8081) so you can configure it by hand.
+# If this file is absent, the node boots in standalone local mode and you can
+# configure it via the Site Settings UI at http://labelhub.local:8081.
 
-# Friendly site name (also used as the Tailscale hostname / MagicDNS name).
+# ── Required ──────────────────────────────────────────────────────────────────
+
+# Friendly site/plant name (shown in the Label Hub UI header).
 SITE_NAME=PLANT1
 
-# Control plane node-API base URL (over the mesh).
-CONTROL_URL=https://control.example.com:9090
+# Shared secret for the D365 inbound webhook (bearer token).
+# Generate: python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+# Use this same value in D365 External Service > Authentication secret.
+INBOUND_SECRET=
 
-# One-time enrollment token from the control dashboard (Enrollment tab).
-ENROLLMENT_TOKEN=paste-token-here
+# ── SSH / access ──────────────────────────────────────────────────────────────
 
-# Tailscale auth key. Optional: if blank, the control plane issues one at enrollment.
-# A tagged (tag:lh-node), pre-authorized key lets the device join unattended.
-TAILSCALE_AUTHKEY=
+# SSH username created on first boot.
+SSH_USER=mike
 
-# Ports (defaults are fine).
+# SSH password (leave blank to disable password auth and use key auth only).
+SSH_PASSWORD=
+
+# Hostname for this node — it will be reachable at http://<HOSTNAME>.local:8081
+HOSTNAME=labelhub
+
+# ── Updates ───────────────────────────────────────────────────────────────────
+
+# GitHub Personal Access Token (repo or contents:read scope).
+# Stored at /etc/label-hub/github-pat (chmod 600, root-only).
+# Required for future updates via the "Update to Latest" button or update.sh.
+# Leave blank to skip — you can add it later via SSH.
+GITHUB_PAT=
+
+# ── Optional: D365 OData integration ─────────────────────────────────────────
+# Enables manual PO/receipt lookups in the receiving label form.
+AZURE_TENANT_ID=
+AZURE_CLIENT_ID=
+AZURE_CLIENT_SECRET=
+D365_BASE_URL=
+D365_COMPANY=
+
+# ── Optional: public tunnel URL ───────────────────────────────────────────────
+# Shown in the D365 External Service setup guide in Site Settings.
+# Set this after you configure cloudflared / azbridge.
+PUBLIC_URL=
+
+# ── Optional: ports (defaults are fine) ──────────────────────────────────────
 LOCAL_PORT=8081
 PUBLIC_PORT=8080
+
+# ── Optional: fleet control plane ────────────────────────────────────────────
+# Leave blank for standalone mode (most common).
+CONTROL_URL=
+ENROLLMENT_TOKEN=
+
+# ── Optional: Tailscale (needed for control plane mesh) ──────────────────────
+# A tagged pre-authorized key (tag:lh-node) lets the device join unattended.
+# If blank and CONTROL_URL is set, the control plane issues a key at enrollment.
+TAILSCALE_AUTHKEY=

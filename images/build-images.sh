@@ -39,11 +39,11 @@ cp -r images/pi-gen/stage-labelhub "$PIGEN/stage-labelhub"
 
 cat > "$PIGEN/config" <<EOF
 IMG_NAME=labelhub-$ARCH
-RELEASE=bookworm
+RELEASE=trixie
 ARCH=$ARCH
 DEPLOY_COMPRESSION=xz
 DISABLE_FIRST_BOOT_USER_RENAME=1
-TARGET_HOSTNAME=printlabels
+TARGET_HOSTNAME=labelhub
 STAGE_LIST="stage0 stage1 stage2 stage-labelhub"
 EOF
 

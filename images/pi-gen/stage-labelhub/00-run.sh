@@ -1,43 +1,61 @@
 #!/bin/bash -e
-# pi-gen custom stage: install Label Hub node + Tailscale + services into the image.
+# pi-gen custom stage: install Label Hub node + Tailscale + services.
 #
-# Expects the cross-compiled node binary and web assets staged next to this script
-# under files/ before the pi-gen build:
-#   files/label-hub        (binary for the image's architecture: arm64 or armhf)
-#   files/web/             (console assets)
+# Files staged by build-images.sh / images.yml before pi-gen runs:
+#   files/label-hub                    binary (arm64 or armhf)
+#   files/web/                         console assets
+#   files/label-hub.service            systemd unit
+#   files/labelhub-firstboot.service   one-shot provisioning unit
+#   files/labelhub-firstboot.sh        provisioning script
+#   files/labelhub.conf.example        config template for boot partition
 #
 # ${ROOTFS_DIR} is provided by pi-gen.
 
+# ── Static files (no ARM execution needed) ────────────────────────────────────
+
 install -d "${ROOTFS_DIR}/opt/label-hub/web"
-install -m 0755 files/label-hub                "${ROOTFS_DIR}/usr/local/bin/label-hub"
-cp -r files/web/.                              "${ROOTFS_DIR}/opt/label-hub/web/"
+install -m 0755 files/label-hub                    "${ROOTFS_DIR}/usr/local/bin/label-hub"
+cp -r files/web/.                                  "${ROOTFS_DIR}/opt/label-hub/web/"
 
-# Services
-install -m 0644 files/label-hub.service        "${ROOTFS_DIR}/etc/systemd/system/label-hub.service"
-install -m 0644 files/labelhub-firstboot.service "${ROOTFS_DIR}/etc/systemd/system/labelhub-firstboot.service"
-install -m 0755 files/labelhub-firstboot.sh    "${ROOTFS_DIR}/usr/local/sbin/labelhub-firstboot.sh"
+install -m 0644 files/label-hub.service            "${ROOTFS_DIR}/etc/systemd/system/label-hub.service"
+install -m 0644 files/labelhub-firstboot.service   "${ROOTFS_DIR}/etc/systemd/system/labelhub-firstboot.service"
+install -m 0755 files/labelhub-firstboot.sh        "${ROOTFS_DIR}/usr/local/sbin/labelhub-firstboot.sh"
 
-# A sample config on the boot partition for the operator to edit.
-install -m 0644 files/labelhub.conf.example    "${ROOTFS_DIR}/boot/firmware/labelhub.conf.example" 2>/dev/null || \
-install -m 0644 files/labelhub.conf.example    "${ROOTFS_DIR}/boot/labelhub.conf.example"
+# Config example on boot partition (editable from any computer after flash).
+# /boot/firmware is the standard path for Pi OS Bookworm / Trixie.
+install -d "${ROOTFS_DIR}/boot/firmware" 2>/dev/null || true
+install -m 0644 files/labelhub.conf.example        "${ROOTFS_DIR}/boot/firmware/labelhub.conf.example"
+# Also copy a ready-to-edit version (user renames/edits this one):
+cp "${ROOTFS_DIR}/boot/firmware/labelhub.conf.example" "${ROOTFS_DIR}/boot/firmware/labelhub.conf.example.bak" 2>/dev/null || true
+
+# ── In-chroot setup (ARM rootfs) ──────────────────────────────────────────────
 
 on_chroot << 'CHROOT'
 set -e
-# Service user + state dir
+
+# Labelhub service user + data dir
 id labelhub >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin labelhub
 install -d -o labelhub -g labelhub /var/lib/label-hub
+mkdir -p /etc/label-hub
+chmod 700 /etc/label-hub
 
-# Tailscale (official apt repo)
-curl -fsSL https://pkgs.tailscale.com/stable/raspbian/bookworm.noarmor.gpg \
-  > /usr/share/keyrings/tailscale-archive-keyring.gpg 2>/dev/null || \
-curl -fsSL https://pkgs.tailscale.com/stable/debian/bookworm.noarmor.gpg \
-  > /usr/share/keyrings/tailscale-archive-keyring.gpg
-echo "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/debian bookworm main" \
-  > /etc/apt/sources.list.d/tailscale.list
-apt-get update
-apt-get install -y tailscale
+# Runtime dependencies
+apt-get update -qq
+apt-get install -y --no-install-recommends curl git
 
-# Enable first-boot provisioning + tailscaled; label-hub is started by firstboot.
+# Tailscale (official install script — auto-detects OS and codename).
+# Used for fleet mesh; silently skipped if not configured in labelhub.conf.
+curl -fsSL https://tailscale.com/install.sh | sh
+
+# Sudoers: allow labelhub service user to restart itself and run updates.
+printf '%s\n' \
+  'labelhub ALL=(root) NOPASSWD: /usr/bin/systemctl restart label-hub' \
+  'labelhub ALL=(root) NOPASSWD: /opt/label-hub-src/deploy/update.sh' \
+  > /etc/sudoers.d/labelhub
+chmod 0440 /etc/sudoers.d/labelhub
+
+# Enable services: firstboot provisions the node; label-hub is started by firstboot.
+# tailscaled is always enabled so it's available if needed.
 systemctl enable tailscaled
 systemctl enable labelhub-firstboot.service
 CHROOT

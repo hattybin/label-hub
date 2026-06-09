@@ -1,14 +1,23 @@
 name: build-pi-images
 
-# Builds the two Raspberry Pi images (arm64 + armhf) and publishes them as
-# release artifacts. pi-gen needs a privileged Linux runner with Docker.
+# Builds the Raspberry Pi images and publishes them as a rolling "latest-images"
+# pre-release. Triggered manually or on a versioned release.
+#
+# pi-gen runs inside Docker and takes ~20 min per architecture, so this workflow
+# is kept separate from the binary CI and run on demand.
+#
+# Trigger: workflow_dispatch, or automatically on published (versioned) releases.
 
 on:
   workflow_dispatch:
   release:
     types: [published]
 
+permissions:
+  contents: write
+
 jobs:
+  # ── 1. Cross-compile the node binary for each architecture ──────────────────
   binaries:
     runs-on: ubuntu-latest
     strategy:
@@ -17,7 +26,7 @@ jobs:
           - arch: arm64
             target: aarch64-unknown-linux-gnu
           - arch: armhf
-            target: arm-unknown-linux-gnueabihf
+            target: arm-unknown-linux-gnueabihf   # ARMv6 baseline — runs on all Pis
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -30,6 +39,7 @@ jobs:
           name: node-${{ matrix.arch }}
           path: target/${{ matrix.target }}/release/label-hub
 
+  # ── 2. Build one image per architecture (needs its binary) ──────────────────
   images:
     needs: binaries
     runs-on: ubuntu-latest
@@ -38,39 +48,107 @@ jobs:
         arch: [arm64, armhf]
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           name: node-${{ matrix.arch }}
           path: ./node-bin
-      - name: Stage files
+
+      - name: Stage files for pi-gen
         run: |
           STAGE=images/pi-gen/stage-labelhub/files
           mkdir -p "$STAGE/web"
-          install -m 0755 node-bin/label-hub "$STAGE/label-hub"
-          cp -r web/. "$STAGE/web/"
-          cp deploy/label-hub.service "$STAGE/"
-          cp images/firstboot/labelhub-firstboot.service "$STAGE/"
-          cp images/firstboot/labelhub-firstboot.sh "$STAGE/"
-          cp images/labelhub.conf.example "$STAGE/"
-      - name: Build image with pi-gen
+          install -m 0755 node-bin/label-hub                           "$STAGE/label-hub"
+          cp -r web/.                                                   "$STAGE/web/"
+          cp deploy/label-hub.service                                   "$STAGE/"
+          cp images/firstboot/labelhub-firstboot.service                "$STAGE/"
+          cp images/firstboot/labelhub-firstboot.sh                     "$STAGE/"
+          cp images/labelhub.conf.example                               "$STAGE/"
+
+      - name: Fetch pi-gen
         run: |
-          git clone --depth=1 https://github.com/RPi-Distro/pi-gen
-          cp -r images/pi-gen/stage-labelhub pi-gen/stage-labelhub
-          cat > pi-gen/config <<EOF
+          git clone --depth=1 https://github.com/RPi-Distro/pi-gen images/pi-gen/_pi-gen
+
+      - name: Write pi-gen config
+        run: |
+          cat > images/pi-gen/_pi-gen/config <<EOF
           IMG_NAME=labelhub-${{ matrix.arch }}
-          RELEASE=bookworm
+          RELEASE=trixie
           ARCH=${{ matrix.arch }}
           DEPLOY_COMPRESSION=xz
-          TARGET_HOSTNAME=printlabels
           DISABLE_FIRST_BOOT_USER_RENAME=1
+          TARGET_HOSTNAME=labelhub
           STAGE_LIST="stage0 stage1 stage2 stage-labelhub"
           EOF
-          cd pi-gen && sudo ./build-docker.sh
-      - name: Checksums
-        run: cd pi-gen/deploy && sha256sum *.img.xz > SHA256SUMS
+
+      - name: Copy stage into pi-gen
+        run: cp -r images/pi-gen/stage-labelhub images/pi-gen/_pi-gen/stage-labelhub
+
+      - name: Build image
+        run: cd images/pi-gen/_pi-gen && sudo ./build-docker.sh
+
+      - name: Compute checksums
+        run: cd images/pi-gen/_pi-gen/deploy && sha256sum *.img.xz > SHA256SUMS
+
       - uses: actions/upload-artifact@v4
         with:
           name: image-${{ matrix.arch }}
           path: |
-            pi-gen/deploy/*.img.xz
-            pi-gen/deploy/SHA256SUMS
+            images/pi-gen/_pi-gen/deploy/*.img.xz
+            images/pi-gen/_pi-gen/deploy/SHA256SUMS
+
+  # ── 3. Publish both images to a rolling "latest-images" release ─────────────
+  publish:
+    needs: images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish rolling image release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHA="${{ github.sha }}"
+          DATE=$(date -u +%Y-%m-%d)
+          gh release delete latest-images --yes 2>/dev/null || true
+          git tag -f latest-images "$SHA"
+          git push origin latest-images --force
+
+          # Rename to include date for human readability
+          for f in dist/*.img.xz; do
+            base=$(basename "$f" .img.xz)
+            mv "$f" "dist/${base}-${DATE}.img.xz"
+          done
+
+          gh release create latest-images \
+            dist/labelhub-arm64-${DATE}.img.xz \
+            dist/labelhub-armhf-${DATE}.img.xz \
+            dist/SHA256SUMS \
+            --title "Pi images ($DATE)" \
+            --notes "$(cat <<'EOF'
+## Raspberry Pi images
+
+Flash with [Raspberry Pi Imager](https://www.raspberrypi.com/software/) or:
+```
+xzcat labelhub-arm64-*.img.xz | sudo dd of=/dev/sdX bs=4M status=progress
+```
+
+**After flashing:** edit `labelhub.conf` on the FAT boot partition (visible from any computer).
+Fill in at minimum `SITE_NAME` and `INBOUND_SECRET`, then boot.
+
+The console will be at `http://labelhub.local:8081` (or the hostname you set).
+
+| Image | Boards |
+|---|---|
+| `labelhub-arm64-*.img.xz` | Pi 3, 4, 5, Zero 2 / Zero 2 W (64-bit OS) |
+| `labelhub-armhf-*.img.xz` | All of the above + Pi Zero / Zero W (32-bit, universal) |
+
+See [images/README.md](https://github.com/${{ github.repository }}/blob/main/images/README.md) for full instructions.
+EOF
+)" \
+            --prerelease
