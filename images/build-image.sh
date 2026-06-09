@@ -104,6 +104,13 @@ fi
 # ── Enable SSH on first boot ──────────────────────────────────────────────────
 touch "$MOUNT_BOOT/ssh"
 
+# ── Pre-create user so Pi OS skips the interactive setup wizard ───────────────
+# Pi OS checks for /boot/firmware/userconf.txt; if present it creates the user
+# and skips the TUI prompt entirely. Default user is 'mike', password 'labelhub'
+# (firstboot.sh changes the password to SSH_PASSWORD from labelhub.conf).
+DEFAULT_HASH=$(openssl passwd -6 'labelhub')
+printf '%s\n' "mike:${DEFAULT_HASH}" > "$MOUNT_BOOT/userconf.txt"
+
 # ── Config template on boot partition ────────────────────────────────────────
 install -m 0644 images/labelhub.conf.example "$MOUNT_BOOT/labelhub.conf.example"
 cp "$MOUNT_BOOT/labelhub.conf.example" "$MOUNT_BOOT/labelhub.conf"
