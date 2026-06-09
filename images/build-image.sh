@@ -101,6 +101,18 @@ if [ -n "$AZBRIDGE_DEB" ] && [ -f "$AZBRIDGE_DEB" ]; then
   install -m 0644 "$AZBRIDGE_DEB" "$MOUNT_ROOT/opt/azbridge.deb"
 fi
 
+# ── PocketTerm 35 overlay (Pi 5 / Waveshare 3.5" DSI display) ────────────────
+if [ "$ARCH" = "arm64" ] && [ -f "images/pocketterm35/waveshare-35dpi-5b.dtbo" ]; then
+  echo "==> Installing PocketTerm35 overlay..."
+  install -m 0644 images/pocketterm35/waveshare-35dpi-5b.dtbo \
+    "$MOUNT_BOOT/overlays/waveshare-35dpi-5b.dtbo"
+  # Patch config.txt: enable i2c/spi and add the overlay lines
+  sed -i 's/^#dtparam=i2c_arm=on/dtparam=i2c_arm=on/' "$MOUNT_BOOT/config.txt"
+  sed -i 's/^#dtparam=spi=on/dtparam=spi=on/'         "$MOUNT_BOOT/config.txt"
+  printf '\n[all]\ndtoverlay=waveshare-35dpi-5b\ndtparam=uart0=on\ndtoverlay=dwc2,dr_mode=host\n' \
+    >> "$MOUNT_BOOT/config.txt"
+fi
+
 # ── Enable SSH on first boot ──────────────────────────────────────────────────
 touch "$MOUNT_BOOT/ssh"
 
