@@ -54,6 +54,18 @@ jobs:
           name: node-${{ matrix.arch }}
           path: ./node-bin
 
+      - name: Download azbridge
+        env:
+          AZBRIDGE_VERSION: "0.16.1"
+        run: |
+          case "${{ matrix.arch }}" in
+            arm64) DEB_ARCH="linux-arm64" ;;
+            armhf) DEB_ARCH="linux-arm"   ;;
+          esac
+          curl -fsSL \
+            "https://github.com/Azure/azure-relay-bridge/releases/download/v${AZBRIDGE_VERSION}/azbridge.${AZBRIDGE_VERSION}.${DEB_ARCH}.deb" \
+            -o /tmp/azbridge.deb
+
       - name: Stage files for pi-gen
         run: |
           STAGE=images/pi-gen/stage-labelhub/files
@@ -64,6 +76,7 @@ jobs:
           cp images/firstboot/labelhub-firstboot.service                "$STAGE/"
           cp images/firstboot/labelhub-firstboot.sh                     "$STAGE/"
           cp images/labelhub.conf.example                               "$STAGE/"
+          cp /tmp/azbridge.deb                                          "$STAGE/azbridge.deb"
 
       - name: Fetch pi-gen
         run: |

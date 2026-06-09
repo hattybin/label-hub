@@ -21,6 +21,9 @@ install -m 0644 files/label-hub.service            "${ROOTFS_DIR}/etc/systemd/sy
 install -m 0644 files/labelhub-firstboot.service   "${ROOTFS_DIR}/etc/systemd/system/labelhub-firstboot.service"
 install -m 0755 files/labelhub-firstboot.sh        "${ROOTFS_DIR}/usr/local/sbin/labelhub-firstboot.sh"
 
+# Stage azbridge .deb for installation inside the chroot
+install -m 0644 files/azbridge.deb                 "${ROOTFS_DIR}/tmp/azbridge.deb"
+
 # Config example on boot partition (editable from any computer after flash).
 # /boot/firmware is the standard path for Pi OS Bookworm / Trixie.
 install -d "${ROOTFS_DIR}/boot/firmware" 2>/dev/null || true
@@ -42,6 +45,10 @@ chmod 700 /etc/label-hub
 # Runtime dependencies
 apt-get update -qq
 apt-get install -y --no-install-recommends curl git
+
+# Azure Relay Bridge (azbridge) — tunnels the public webhook port to Azure.
+dpkg -i /tmp/azbridge.deb || apt-get install -f -y
+rm /tmp/azbridge.deb
 
 # Tailscale (official install script — auto-detects OS and codename).
 # Used for fleet mesh; silently skipped if not configured in labelhub.conf.
