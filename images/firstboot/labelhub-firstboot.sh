@@ -20,7 +20,11 @@ done
 
 # ── System user + data dir (always needed) ───────────────────────────────────
 
-id labelhub >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin labelhub
+# Create the service account only if SSH_USER won't be using the same name.
+# When SSH_USER=labelhub the SSH-user block below upgrades it to interactive.
+if [ "${SSH_USER:-labelhub}" != "labelhub" ]; then
+  id labelhub >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin labelhub
+fi
 install -d -o labelhub -g labelhub /var/lib/label-hub
 mkdir -p /opt/label-hub /etc/label-hub
 chmod 700 /etc/label-hub
@@ -45,7 +49,7 @@ set +a
 SITE_NAME="${SITE_NAME:-label-hub}"
 LOCAL_PORT="${LOCAL_PORT:-8081}"
 PUBLIC_PORT="${PUBLIC_PORT:-8080}"
-SSH_USER="${SSH_USER:-mike}"
+SSH_USER="${SSH_USER:-labelhub}"
 SSH_PASSWORD="${SSH_PASSWORD:-}"
 HOSTNAME="${HOSTNAME:-labelhub}"
 GITHUB_PAT="${GITHUB_PAT:-}"
@@ -102,13 +106,22 @@ if [ -n "$SSH_USER" ]; then
   if ! id "$SSH_USER" >/dev/null 2>&1; then
     log "creating user: $SSH_USER"
     useradd -m -s /bin/bash "$SSH_USER"
+  else
+    # User may exist as a no-login service account — upgrade it to interactive.
+    usermod -s /bin/bash "$SSH_USER"
+    if [ ! -d "/home/$SSH_USER" ]; then
+      mkdir -p "/home/$SSH_USER"
+      chown "$SSH_USER:$SSH_USER" "/home/$SSH_USER"
+    fi
   fi
   if [ -n "$SSH_PASSWORD" ]; then
     log "setting password for $SSH_USER"
     echo "${SSH_USER}:${SSH_PASSWORD}" | chpasswd
   fi
-  # Add to sudo group (standard Pi OS convention)
+  # Add to sudo group and grant passwordless sudo for remote management.
   usermod -aG sudo "$SSH_USER" 2>/dev/null || usermod -aG wheel "$SSH_USER" 2>/dev/null || true
+  echo "$SSH_USER ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/$SSH_USER"
+  chmod 440 "/etc/sudoers.d/$SSH_USER"
 fi
 
 # ── GitHub PAT + source repo ──────────────────────────────────────────────────

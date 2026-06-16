@@ -58,7 +58,9 @@ chmod 600 "$PREFIX/.env"
 install -d /var/lib/label-hub
 
 # ── systemd ──────────────────────────────────────────────────────────────────
-id labelhub >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin labelhub
+if ! id labelhub >/dev/null 2>&1; then
+  useradd -r -s /usr/sbin/nologin labelhub
+fi
 chown -R labelhub:labelhub /var/lib/label-hub
 install -m 0644 "$(dirname "$0")/label-hub.service" /etc/systemd/system/label-hub.service
 systemctl daemon-reload

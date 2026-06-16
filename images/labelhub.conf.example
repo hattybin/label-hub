@@ -33,10 +33,10 @@ WIFI_PASSWORD=
 # ── SSH / access ──────────────────────────────────────────────────────────────
 
 # SSH username created on first boot.
-SSH_USER=mike
+SSH_USER=labelhub
 
 # SSH password (leave blank to disable password auth and use key auth only).
-SSH_PASSWORD=
+SSH_PASSWORD=labelhub
 
 # Hostname for this node — it will be reachable at http://<HOSTNAME>.local:8081
 HOSTNAME=labelhub
