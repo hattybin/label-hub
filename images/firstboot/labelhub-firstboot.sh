@@ -61,9 +61,12 @@ AZURE_CLIENT_ID="${AZURE_CLIENT_ID:-}"
 AZURE_CLIENT_SECRET="${AZURE_CLIENT_SECRET:-}"
 D365_BASE_URL="${D365_BASE_URL:-}"
 D365_COMPANY="${D365_COMPANY:-}"
+D365_SITE_FILTER="${D365_SITE_FILTER:-}"
 CONTROL_URL="${CONTROL_URL:-}"
 ENROLLMENT_TOKEN="${ENROLLMENT_TOKEN:-}"
 TAILSCALE_AUTHKEY="${TAILSCALE_AUTHKEY:-}"
+AZBRIDGE_CONNECTION_STRING="${AZBRIDGE_CONNECTION_STRING:-}"
+AZBRIDGE_HC_NAME="${AZBRIDGE_HC_NAME:-}"
 WIFI_COUNTRY="${WIFI_COUNTRY:-US}"
 WIFI_SSID="${WIFI_SSID:-}"
 WIFI_PASSWORD="${WIFI_PASSWORD:-}"
@@ -149,20 +152,25 @@ else
   log "GITHUB_PAT not set — skipping source clone (add PAT later for OTA updates)"
 fi
 
-# ── Install staged packages (azbridge, Tailscale) ────────────────────────────
+# ── Install staged packages ───────────────────────────────────────────────────
+# IMPORTANT: Tailscale must be installed before azbridge.  azbridge is
+# force-installed (dpkg --force-depends) to work around a libicu version
+# conflict on Debian Trixie; that leaves apt in a "broken" state.  Any
+# apt-based installer (like Tailscale's install.sh) that runs afterwards
+# will fail because apt tries to resolve the broken dep first.
 
-# azbridge staged in the image at build time (arm64 only)
-if [ -f /opt/azbridge.deb ]; then
-  log "installing azbridge..."
-  apt-get update -qq
-  dpkg -i /opt/azbridge.deb || apt-get install -f -y
-  rm /opt/azbridge.deb
-fi
-
-# Tailscale (install on first boot; only used for fleet/control-plane mode)
+# Tailscale — uses apt, so must run before azbridge force-install.
 if [ -n "$TAILSCALE_AUTHKEY" ] && ! command -v tailscale >/dev/null 2>&1; then
   log "installing Tailscale..."
   curl -fsSL https://tailscale.com/install.sh | sh || log "WARNING: Tailscale install failed"
+fi
+
+# azbridge — force-install to bypass libicu52-74 vs libicu76 conflict.
+# Do NOT run apt-get install -f afterwards; that would remove azbridge.
+if [ -f /opt/azbridge.deb ]; then
+  log "installing azbridge (force-depends for libicu compat)..."
+  dpkg -i --force-depends /opt/azbridge.deb || log "WARNING: azbridge install failed"
+  rm /opt/azbridge.deb
 fi
 
 # ── Tailscale ─────────────────────────────────────────────────────────────────
@@ -171,6 +179,30 @@ if [ -n "$TAILSCALE_AUTHKEY" ] && command -v tailscale >/dev/null 2>&1; then
   log "joining Tailscale as $SITE_NAME"
   tailscale up --auth-key="$TAILSCALE_AUTHKEY" --hostname="$SITE_NAME" || \
     log "WARNING: tailscale up failed"
+fi
+
+# ── azbridge service ──────────────────────────────────────────────────────────
+
+if [ -n "$AZBRIDGE_CONNECTION_STRING" ] && [ -n "$AZBRIDGE_HC_NAME" ] && \
+   command -v azbridge >/dev/null 2>&1; then
+  log "configuring azbridge for HC: $AZBRIDGE_HC_NAME"
+  cat > /etc/systemd/system/azbridge.service <<EOF
+[Unit]
+Description=Azure Relay Bridge for label-hub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Environment=DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
+ExecStart=/usr/share/azbridge/azbridge -x "${AZBRIDGE_CONNECTION_STRING}" -H ${AZBRIDGE_HC_NAME}:http/127.0.0.1:${PUBLIC_PORT}
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl daemon-reload
+  systemctl enable --now azbridge.service || log "WARNING: azbridge service failed to start"
 fi
 
 # ── Write .env ────────────────────────────────────────────────────────────────
@@ -197,6 +229,7 @@ AZURE_CLIENT_ID=${AZURE_CLIENT_ID}
 AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET}
 D365_BASE_URL=${D365_BASE_URL}
 D365_COMPANY=${D365_COMPANY}
+D365_SITE_FILTER=${D365_SITE_FILTER}
 EOF
 chmod 600 /opt/label-hub/.env
 chown labelhub:labelhub /opt/label-hub/.env

@@ -49,6 +49,13 @@ HOSTNAME=labelhub
 # Leave blank to skip — you can add it later via SSH.
 GITHUB_PAT=
 
+# ── Optional: D365 site filter ───────────────────────────────────────────────
+# When running multiple hubs (one per plant/site), set this to the site or
+# warehouse code this node should accept. Jobs whose X-Site header doesn't
+# match are rejected with 422. Leave blank to accept jobs from any site.
+# Add X-Site: <D365 field> to the D365 external service operation headers.
+D365_SITE_FILTER=
+
 # ── Optional: D365 OData integration ─────────────────────────────────────────
 # Enables manual PO/receipt lookups in the receiving label form.
 AZURE_TENANT_ID=
@@ -70,6 +77,14 @@ PUBLIC_PORT=8080
 # Leave blank for standalone mode (most common).
 CONTROL_URL=
 ENROLLMENT_TOKEN=
+
+# ── Optional: Azure Relay Bridge (azbridge) ──────────────────────────────────
+# Forwards the D365 webhook from Azure Relay to this node's public port.
+# Requires the azbridge .deb to be included at image build time (3rd arg to build-image.sh).
+# AZBRIDGE_CONNECTION_STRING: full SAS connection string from your Azure Relay namespace.
+# AZBRIDGE_HC_NAME: the Hybrid Connection name (e.g. labelhub-print).
+AZBRIDGE_CONNECTION_STRING=
+AZBRIDGE_HC_NAME=
 
 # ── Optional: Tailscale (needed for control plane mesh) ──────────────────────
 # A tagged pre-authorized key (tag:lh-node) lets the device join unattended.

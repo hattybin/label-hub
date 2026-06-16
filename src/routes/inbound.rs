@@ -53,7 +53,26 @@ pub async fn handle(
         return (StatusCode::UNAUTHORIZED, "invalid secret").into_response();
     }
 
-    // 2. Determine printer name + ZPL from whichever body shape was used.
+    // 2. Site filter — if D365_SITE_FILTER is set, reject jobs whose X-Site header
+    //    doesn't match. Prevents misdirected jobs when multiple nodes share a D365
+    //    external service config.  Leave blank to accept jobs from any site.
+    if let Some(filter) = &state.config.site_filter {
+        let site = headers
+            .get("x-site")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.trim())
+            .unwrap_or("");
+        if !site.eq_ignore_ascii_case(filter) {
+            tracing::warn!("inbound: site filter rejected '{}' (expected '{}')", site, filter);
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                format!("site filter: expected '{filter}', got '{site}'"),
+            )
+                .into_response();
+        }
+    }
+
+    // 3. Determine printer name + ZPL from whichever body shape was used.
     let content_type = headers
         .get(axum::http::header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
@@ -89,7 +108,7 @@ pub async fn handle(
         return (StatusCode::BAD_REQUEST, "empty label body").into_response();
     }
 
-    // 3. Build the job.
+    // 4. Build the job.
     let mut job = Job {
         id: Uuid::new_v4().to_string(),
         printer: printer_name.clone(),
@@ -102,7 +121,7 @@ pub async fn handle(
         error: None,
     };
 
-    // 4. Verify the printer exists before deciding what to do.
+    // 5. Verify the printer exists before deciding what to do.
     let known = {
         let store = state.store.lock().await;
         crate::routes::find_printer(&store.printers, &printer_name).is_some()

@@ -63,6 +63,12 @@ pub struct Config {
     pub d365_base_url: Option<String>,
     pub d365_company: Option<String>,
 
+    // ── D365 site filter ─────────────────────────────────────────────────────
+    /// When set, the inbound webhook rejects any job whose `X-Site` header does
+    /// not match this value (case-insensitive). Prevents jobs destined for another
+    /// site from printing here if D365 is misconfigured.
+    pub site_filter: Option<String>,
+
     // ── D365 entity name overrides (skip auto-discovery) ─────────────────────
     /// Pin receipt header entity (e.g. `ProductReceiptHeader`). Skip auto-probe.
     pub receipt_header_entity: Option<String>,
@@ -147,6 +153,8 @@ impl Config {
             azure_client_secret: opt("AZURE_CLIENT_SECRET"),
             d365_base_url: opt("D365_BASE_URL").map(|v| v.trim_end_matches('/').to_string()),
             d365_company: opt("D365_COMPANY"),
+
+            site_filter: opt("D365_SITE_FILTER"),
 
             receipt_header_entity: opt("D365_RECEIPT_HEADER_ENTITY"),
             receipt_lines_entity: opt("D365_RECEIPT_LINES_ENTITY"),

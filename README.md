@@ -112,6 +112,7 @@ Two body shapes are accepted:
 |---|---|---|
 | `Authorization: Bearer <secret>` (or `X-Auth-Secret`) | shared secret | `$auth.secret$` |
 | `X-Printer-Name` header | printer name | `$label.printer$` |
+| `X-Site` header | site/warehouse code | `$label.InventSiteId$` or similar *(optional — see Site Filter below)* |
 | body (`text/plain`) | raw ZPL | `$label.body$` |
 
 **2. JSON (`application/json`):**
@@ -121,7 +122,19 @@ Two body shapes are accepted:
 (use `$label.body:base64$`; a plain `"zpl": "..."` field also works.)
 
 Responses: `200` accepted (queued or printed) · `401` bad secret · `422` unknown
-printer · `400` malformed. **D365 treats any non-2xx as a failure and logs it.**
+printer or site mismatch · `400` malformed. **D365 treats any non-2xx as a failure and logs it.**
+
+### Site filter
+
+When running multiple hubs (one per plant/site), set `D365_SITE_FILTER` on each node
+to its site or warehouse code. The hub then rejects any inbound job whose `X-Site`
+header doesn't match — a safety net against D365 misconfiguration sending jobs to the
+wrong location. The comparison is case-insensitive.
+
+Configure in D365 by adding `X-Site` to the external service operation's HTTP request
+headers, mapped to the appropriate D365 field (e.g. `$label.InventSiteId$`,
+`$label.InventLocationId$`, or a custom field depending on your label template).
+Leave `D365_SITE_FILTER` blank on single-site deployments — the header is then ignored.
 
 > **Hold-mode note:** in hold mode the hub returns `200` as soon as the job is
 > queued, so D365 records the label as printed even before an operator releases it.
@@ -140,6 +153,7 @@ In D365: **Warehouse management → Setup → External services**.
 - HTTP request headers:
   - `Authorization` = `Bearer $auth.secret$`
   - `X-Printer-Name` = `$label.printer$`
+  - `X-Site` = `<D365 site field>` *(required when `D365_SITE_FILTER` is set on the hub)*
 - On the **Label print service** tab, set **Print operation** to this operation.
 
 **External service instance:**
@@ -170,6 +184,7 @@ The console's **Site Management** tab prints this exact mapping with your live U
 | `DEFAULT_PRINTER` | — | printer used if `X-Printer-Name` is omitted |
 | `AUTO_PRINT` | `false` | initial auto-print state (operator can change live) |
 | `DATA_DIR` | `data` | where printers/jobs/settings JSON is persisted |
+| `D365_SITE_FILTER` | — | if set, only accept jobs whose `X-Site` header matches this value (case-insensitive); leave blank to accept from any site |
 | `AZURE_TENANT_ID` / `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` / `D365_BASE_URL` / `D365_COMPANY` | — | optional D365 OData lookups |
 
 ## Build for Raspberry Pi

@@ -67,7 +67,7 @@ async function saveEnvSettings() {
     'SITE_NAME', 'PUBLIC_URL', 'INBOUND_SECRET', 'DEFAULT_PRINTER',
     'MDNS_ENABLE', 'MDNS_HOSTNAME', 'LOCAL_PORT', 'PUBLIC_PORT',
     'AZURE_TENANT_ID', 'AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET',
-    'D365_BASE_URL', 'D365_COMPANY',
+    'D365_BASE_URL', 'D365_COMPANY', 'D365_SITE_FILTER',
     'D365_RECEIPT_HEADER_ENTITY', 'D365_RECEIPT_LINES_ENTITY', 'D365_RECEIPT_DATE_FIELD',
   ];
   const body = {};
@@ -235,6 +235,7 @@ function renderD365Help() {
   HTTP request headers:
     Authorization  : Bearer $auth.secret$
     X-Printer-Name : $label.printer$
+    X-Site         : <D365 site/warehouse field>   (required when Site Filter is set)
 
 External service instance:
   Base URL             : ${base}     (your public tunnel/relay host)

@@ -25,7 +25,8 @@ const EDITABLE_KEYS: &[&str] = &[
     // D365
     "AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET",
     "D365_BASE_URL", "D365_COMPANY",
-    // D365 entity overrides
+    // D365 site filter + entity overrides
+    "D365_SITE_FILTER",
     "D365_RECEIPT_HEADER_ENTITY", "D365_RECEIPT_LINES_ENTITY", "D365_RECEIPT_DATE_FIELD",
 ];
 
