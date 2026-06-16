@@ -196,6 +196,28 @@ pub async fn put(
     Json(settings)
 }
 
+async fn svc_active(name: &str) -> bool {
+    Command::new("systemctl")
+        .args(["is-active", "--quiet", name])
+        .status()
+        .await
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+async fn tailscale_connected() -> bool {
+    Command::new("tailscale")
+        .args(["status", "--json"])
+        .output()
+        .await
+        .map(|o| {
+            if !o.status.success() { return false; }
+            let body = String::from_utf8_lossy(&o.stdout);
+            body.contains("\"BackendState\":\"Running\"")
+        })
+        .unwrap_or(false)
+}
+
 /// GET /api/health — config snapshot for the Site Management tab.
 pub async fn health(State(state): State<AppState>) -> impl IntoResponse {
     let cfg = &state.config;
@@ -212,6 +234,10 @@ pub async fn health(State(state): State<AppState>) -> impl IntoResponse {
         )
     };
     let creds = state.get_creds().await;
+    let (azbridge_up, tailscale_up) = tokio::join!(
+        svc_active("azbridge"),
+        tailscale_connected(),
+    );
     Json(json!({
         "status": "ok",
         "site": cfg.site_name,
@@ -242,6 +268,10 @@ pub async fn health(State(state): State<AppState>) -> impl IntoResponse {
             "enrolled": creds.is_some(),
             "nodeId": creds.as_ref().map(|c| c.node_id.clone()),
             "configVersion": config_version,
+        },
+        "services": {
+            "azbridge": if azbridge_up { "connected" } else { "offline" },
+            "tailscale": if tailscale_up { "connected" } else { "offline" },
         },
     }))
 }

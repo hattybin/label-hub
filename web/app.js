@@ -203,6 +203,10 @@ async function loadHealth() {
     const mdns = h.mdns && h.mdns.enabled
       ? `<span style="color:var(--good)">on</span> · http://${esc(h.mdns.host)}:${h.listeners.localPort}`
       : 'off';
+    const svcDot = (state) => state === 'connected'
+      ? '<span style="color:var(--good)">●</span> connected'
+      : '<span style="color:var(--bad)">●</span> offline';
+    const svc = h.services || {};
     $('healthBox').innerHTML = `
       Site: <b>${esc(h.site)}</b><br>
       Public webhook port: <b>${h.listeners.publicPort}</b> (loopback → tunnel) &nbsp;
@@ -212,7 +216,8 @@ async function loadHealth() {
       Inbound secret: ${h.secretConfigured ? '<span style="color:var(--good)">configured</span>' : '<span style="color:var(--bad)">NOT SET</span>'}<br>
       Auto-print: <b>${h.autoPrint}</b> &nbsp; Default printer: <b>${esc(h.defaultPrinter || '(none)')}</b><br>
       Printers: <b>${h.counts.printers}</b> &nbsp; Queued: <b>${h.counts.pending}</b> &nbsp; History: <b>${h.counts.history}</b><br>
-      D365 OData: ${h.d365.enabled ? '<span style="color:var(--good)">enabled</span> · ' + esc(h.d365.baseUrl || '') : 'disabled (optional)'}`;
+      D365 OData: ${h.d365.enabled ? '<span style="color:var(--good)">enabled</span> · ' + esc(h.d365.baseUrl || '') : 'disabled (optional)'}<br>
+      Azure Relay (azbridge): ${svcDot(svc.azbridge)} &nbsp;|&nbsp; Tailscale: ${svcDot(svc.tailscale)}`;
     renderD365Help();
   } catch (e) { $('healthBox').textContent = 'Health unavailable: ' + e.message; }
 }
