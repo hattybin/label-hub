@@ -206,15 +206,13 @@ async fn svc_active(name: &str) -> bool {
 }
 
 async fn tailscale_connected() -> bool {
-    Command::new("tailscale")
-        .args(["status", "--json"])
+    // Check for an assigned Tailscale IP on the tailscale0 interface — works
+    // without socket access (labelhub user is not in the tailscale group).
+    Command::new("ip")
+        .args(["addr", "show", "tailscale0"])
         .output()
         .await
-        .map(|o| {
-            if !o.status.success() { return false; }
-            let body = String::from_utf8_lossy(&o.stdout);
-            body.contains("\"BackendState\":\"Running\"")
-        })
+        .map(|o| o.status.success() && String::from_utf8_lossy(&o.stdout).contains("inet "))
         .unwrap_or(false)
 }
 
