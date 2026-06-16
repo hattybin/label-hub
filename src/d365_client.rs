@@ -256,9 +256,9 @@ pub async fn resolve_entity(state: &AppState, key: &str) -> Result<String, Strin
     };
 
     for &name in candidates {
-        // Pass 1: bare probe
+        // Pass 1: bare probe — only a 2xx with no routing-error body counts as found.
         match odata_raw(state, name, "$top=1&cross-company=true").await {
-            Ok((status, body)) if status != 404 => {
+            Ok((status, body)) if (200..300).contains(&status) => {
                 if !is_routing_error(&body) {
                     tracing::info!("entity '{}' → {} [{}]", key, name, status);
                     state.entity_cache.write().await.insert(key.to_string(), name.to_string());
@@ -267,10 +267,11 @@ pub async fn resolve_entity(state: &AppState, key: &str) -> Result<String, Strin
                 continue;
             }
             Ok((404, _)) => {
-                // Pass 2: some entities need a filter to return a non-404
+                // Pass 2: some entities return 404 on bare $top=1 but 200 with a filter.
+                // Only accept 2xx to avoid caching an entity that returns 400/4xx on the probe.
                 let q2 = qs(&[("$filter", "PurchaseOrderNumber ne 'ZZZNOMATCH'"), ("$top", "1"), ("cross-company", "true")]);
                 if let Ok((s2, body2)) = odata_raw(state, name, &q2).await {
-                    if s2 != 404 && !is_routing_error(&body2) {
+                    if (200..300).contains(&s2) && !is_routing_error(&body2) {
                         tracing::info!("entity '{}' → {} [{}, filtered probe]", key, name, s2);
                         state.entity_cache.write().await.insert(key.to_string(), name.to_string());
                         return Ok(name.to_string());
