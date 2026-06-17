@@ -1,5 +1,7 @@
 ^XA
 ^MMT
+^PR4
+~SD25
 ^PW812
 ^LL406
 ^LS0
