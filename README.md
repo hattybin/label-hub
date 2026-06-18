@@ -39,7 +39,7 @@ cleanly separated:
    $label.body$ (ZPL)            azbridge                    └─▶ queue / forward ──TCP 9100──▶ printers
    $auth.secret$                                             ┌──────────────────────────┐
                                                              │  LOCAL :8081  (LAN)       │
-  operators ─────── http://printlabels.local:8081 ──────────▶  console + management APIs │
+  operators ─────── http://labelhub.local:8081 ──────────────▶  console + management APIs │
                           (mDNS)                              └──────────────────────────┘
 ```
 
@@ -48,7 +48,7 @@ cleanly separated:
   it, so the webhook port is never exposed to the LAN, and the public tunnel can
   *never* reach the console, printer config, or settings.
 - **LOCAL listener** — the console + all management/settings APIs, bound to the
-  **LAN** and (optionally) advertised over **mDNS** as `printlabels.local`. Relaxed
+  **LAN** and (optionally) advertised over **mDNS** as `labelhub.local`. Relaxed
   by design: it has no auth because it's LAN-trusted. Don't expose it to the tunnel.
 
 A **tunnel sidecar** gives the public listener its HTTPS address:
@@ -59,7 +59,7 @@ The hub is transport-agnostic — it doesn't care which tunnel is in front.
 
 ### Accessing the console
 
-With `MDNS_ENABLE=true`, operators just browse to **`http://printlabels.local:8081`**
+With `MDNS_ENABLE=true`, operators just browse to **`http://labelhub.local:8081`**
 from any device on the LAN — no IP to remember, no tunnel host. (`MDNS_HOSTNAME`
 changes the name.) On a single-NIC Raspberry Pi this resolves cleanly; if Avahi is
 already publishing the Pi's system hostname you can also use that instead.
@@ -87,7 +87,7 @@ cp .env.example .env          # set INBOUND_SECRET (and SITE_NAME)
 cargo run                     # console on :8081, webhook on :8080
 ```
 
-Open the console at <http://localhost:8081> (or `http://printlabels.local:8081` from
+Open the console at <http://localhost:8081> (or `http://labelhub.local:8081` from
 another LAN device), add a printer under **Site Management**, then simulate a D365
 call to the public webhook port:
 
@@ -178,7 +178,7 @@ The console's **Site Management** tab prints this exact mapping with your live U
 | `LOCAL_BIND` | `0.0.0.0` | console listener bind addr (LAN) |
 | `LOCAL_PORT` | `8081` | console listener port |
 | `MDNS_ENABLE` | `false` | advertise the console over mDNS |
-| `MDNS_HOSTNAME` | `printlabels` | mDNS name → `printlabels.local` |
+| `MDNS_HOSTNAME` | `labelhub` | mDNS name → `labelhub.local` |
 | `INBOUND_SECRET` | — | shared secret for the webhook (= D365 `$auth.secret$`) |
 | `SITE_NAME` | `LABEL-HUB` | label shown in the console |
 | `DEFAULT_PRINTER` | — | printer used if `X-Printer-Name` is omitted |

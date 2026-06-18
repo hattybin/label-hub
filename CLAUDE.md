@@ -179,7 +179,7 @@ See `deploy/control-azure.md` and `deploy/tailscale-acls.md` for production depl
 | `LOCAL_BIND` | `0.0.0.0` | Console listener bind (LAN) |
 | `LOCAL_PORT` | `8081` | Console listener port |
 | `MDNS_ENABLE` | `false` | Advertise console as `<MDNS_HOSTNAME>.local` |
-| `MDNS_HOSTNAME` | `printlabels` | mDNS name → `printlabels.local` |
+| `MDNS_HOSTNAME` | `labelhub` | mDNS name → `labelhub.local` |
 | `AUTO_PRINT` | `false` | Print on arrival vs. hold for operator release |
 | `DATA_DIR` | `data` | Directory for JSON persistence files |
 | `DEFAULT_PRINTER` | — | Fallback if `X-Printer-Name` header is absent |
