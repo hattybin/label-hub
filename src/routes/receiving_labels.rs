@@ -33,13 +33,13 @@ fn one() -> u32 { 1 }
 
 // ── ZPL builder ──────────────────────────────────────────────────────────────
 
-// Embedded at compile time; lives in web/ so the update script syncs it to the
-// Pi alongside HTML/JS.  Edit web/receiving-label.zpl and rebuild to change it.
-const ZPL_TEMPLATE: &str = include_str!("../../web/receiving-label.zpl");
+const ZPL_TEMPLATE_PATH: &str = "web/receiving-label.zpl";
 
-fn build_zpl(label: &ReceivingLabel) -> String {
+fn build_zpl(label: &ReceivingLabel) -> Result<String, String> {
+    let template = std::fs::read_to_string(ZPL_TEMPLATE_PATH)
+        .map_err(|e| format!("failed to read ZPL template ({ZPL_TEMPLATE_PATH}): {e}"))?;
     let s = |v: &str| crate::printer::sanitize_field(v);
-    ZPL_TEMPLATE
+    Ok(template
         .replace("{{item}}", &s(&label.item_number))
         .replace("{{name}}", &s(&label.item_desc))
         .replace("{{po}}", &s(&label.po_number))
@@ -52,7 +52,7 @@ fn build_zpl(label: &ReceivingLabel) -> String {
         .replace("{{batch}}", &s(&label.batch_id))
         .replace("{{serial}}", &s(&label.serial_id))
         .replace("{{wh}}", &s(&label.warehouse_id))
-        .replace("{{bin}}", &s(&label.bin_location))
+        .replace("{{bin}}", &s(&label.bin_location)))
 }
 
 // ── Print ─────────────────────────────────────────────────────────────────────
@@ -80,7 +80,10 @@ pub async fn print(
     for label in &req.labels {
         let count = label.count.clamp(0, 999);
         if count == 0 { continue; }
-        let zpl = build_zpl(label);
+        let zpl = match build_zpl(label) {
+            Ok(z) => z,
+            Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": e }))).into_response(),
+        };
         for _ in 0..count {
             parts.push(zpl.clone());
         }
@@ -112,7 +115,10 @@ pub async fn preview(
     State(state): State<AppState>,
     Json(req): Json<PreviewRequest>,
 ) -> impl IntoResponse {
-    let zpl = build_zpl(&req.label);
+    let zpl = match build_zpl(&req.label) {
+        Ok(z) => z,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, format!("template error: {e}")).into_response(),
+    };
     let size = req.size.unwrap_or_else(|| "4x2".to_string());
     let url = format!("https://api.labelary.com/v1/printers/8dpmm/labels/{size}/0/");
 
