@@ -1,0 +1,28 @@
+^XA
+^MMT
+^PR4
+~SD25
+^PW812
+^LL406
+^LS0
+
+^FO0,0^GB812,60,60^FS
+^FO15,8^A0N,42,42^FR^FDButcher Power Products^FS
+^FO350,14^A0N,32,32^FR^FB450,1,0,R^FD$ItemId$^FS
+
+^FO15,70^A0N,22,22^FDItem ID^FS
+^FO15,98^A0N,34,34^FD$ItemId$^FS
+^FO520,70^A0N,22,22^FDPO#:^FS
+^FO520,98^A0N,34,34^FD$PurchaseOrderId$^FS
+
+^FO15,140^A0N,22,22^FB375,5,0,L^FD$ProductTranslation.Description$^FS
+^BY2^FO520,175^BCN,75,N,N,N^FD$ItemId$^FS
+
+^FO0,276^GB812,3,3^FS
+
+^FO15,286^A0N,20,20^FDUnit:^FS
+^FO105,286^A0N,20,20^FD{{$UnitID$}}^FS
+^FO15,334^A0N,20,20^FDProduct Name: {{$ItemName$}}^FS
+^FO15,364^A0N,20,20^FDSearch Name: {{$Product.SearchName$}}^FS
+
+^XZ
